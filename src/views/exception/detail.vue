@@ -1,0 +1,1015 @@
+<template>
+  <div class="exception-detail-page" v-loading="loading" element-loading-text="加载中...">
+    <!-- 加载失败状态 -->
+    <div v-if="loadError" class="error-state">
+      <el-result icon="error" title="加载失败" sub-title="无法获取异常单详情，请检查网络或稍后重试">
+        <template #extra>
+          <el-button type="primary" @click="loadDetail">重新加载</el-button>
+          <el-button @click="goBack">返回列表</el-button>
+        </template>
+      </el-result>
+    </div>
+
+    <template v-else-if="detail">
+    <!-- 顶部导航条 -->
+    <header class="detail-topbar">
+      <el-button :icon="ArrowLeft" text @click="goBack">返回列表</el-button>
+      <div class="topbar-info">
+        <span class="topbar-no">{{ detail?.exceptionNo || '-' }}</span>
+        <span v-if="detail?.severity" class="topbar-tag" :style="severityStyle(detail.severity)">{{ detail.severity }}</span>
+        <span v-if="detail?.status" class="topbar-tag" :style="statusStyle(detail.status)">{{ detail.status }}</span>
+        <span class="topbar-tag" :style="processStyle(detail?.processType || '')">
+          {{ detail?.processType ? (PROCESS_TYPE_LABELS[detail.processType] || detail.processType) : '未选择流程' }}
+        </span>
+         <el-button v-if="detail?.status === '已闭环'" size="small" type="warning" :loading="resetLoading" @click="handleReset">
+           重置为待整改
+         </el-button>
+       </div>
+       <QualityRuleDialog />
+     </header>
+
+    <div class="detail-layout">
+      <!-- 左侧面板 -->
+      <aside class="detail-sidebar">
+        <!-- 异常摘要卡片 -->
+        <div class="summary-card">
+          <div class="summary-title">异常摘要</div>
+          <div class="summary-grid">
+            <div class="summary-field"><label>供应商</label><span>{{ detail?.supplierName || '-' }}</span></div>
+            <div class="summary-field"><label>物料代码</label><span class="mono">{{ detail?.materialCode || '-' }}</span></div>
+            <div class="summary-field"><label>异常来源</label><span>{{ detail?.sourceType || '-' }}</span></div>
+            <div class="summary-field"><label>截止日期</label><span>{{ detail?.deadline || '-' }}</span></div>
+            <div class="summary-field"><label>发起人</label><span>{{ detail?.createdBy || '-' }}</span></div>
+            <div class="summary-field"><label>不良数量</label><span class="mono">{{ detail?.defectQty ?? '-' }}</span></div>
+         </div>
+
+         <div v-if="detail?.sourceType === '来料不良'" class="summary-card rule-source-card">
+           <div class="summary-title">自动判定依据</div>
+           <div class="rule-decision-line">
+             <span :class="detail.severity === '严重' ? 'rule-serious' : 'rule-general'">{{ detail.severity }}</span>
+             <b>{{ detail.processType || '待选择流程' }}</b>
+             <em>{{ detail.notificationLevel || '提醒' }}通知</em>
+           </div>
+           <p>{{ detail.ruleReason || '历史数据未记录自动判定依据' }}</p>
+           <div class="summary-grid">
+             <div class="summary-field"><label>30天重复</label><span>{{ detail.repeatCount30Days ?? '—' }} 批</span></div>
+             <div class="summary-field"><label>90天重复</label><span>{{ detail.repeatCount90Days ?? '—' }} 批</span></div>
+             <div class="summary-field"><label>响应截止</label><span>{{ detail.responseDeadline?.replace('T', ' ').slice(0, 16) || '—' }}</span></div>
+           </div>
+         </div>
+          <div class="summary-desc" v-if="detail?.defectDesc">
+            <label>不良描述</label>
+            <p>{{ detail.defectDesc }}</p>
+          </div>
+        </div>
+
+        <!-- 检验来源卡片（来料不良→供应商整改链路起点） -->
+        <div v-if="detail?.sourceType === '来料不良' && detail?.materialInspection" class="summary-card inspection-source-card">
+          <div class="summary-title" style="color: #b8763e">检验来源</div>
+          <div class="summary-grid">
+            <div class="summary-field">
+              <label>检验单号</label>
+              <span class="mono">{{ detail.materialInspection.recordNo || '-' }}</span>
+            </div>
+            <div class="summary-field">
+              <label>检验结果</label>
+              <span class="tag-ng">不合格</span>
+            </div>
+            <div class="summary-field">
+              <label>不合格数量</label>
+              <span class="mono" style="color: #B84B3E">{{ detail.materialInspection.unqualifiedQty ?? '-' }}</span>
+            </div>
+            <div class="summary-field">
+              <label>处理方式</label>
+              <span>{{ detail.materialInspection.handlingMethod || '-' }}</span>
+            </div>
+            <div class="summary-field">
+              <label>检验日期</label>
+              <span>{{ detail.materialInspection.inspectionDate || '-' }}</span>
+            </div>
+            <div class="summary-field">
+              <label>供应商代码</label>
+              <span class="mono">{{ detail.materialInspection.supplierCode || '-' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- CAPA 流程步骤条 -->
+        <ProcessStepper
+          v-if="showCapaProcess"
+          v-model:current="activeStage"
+          :process-type="detail?.processType"
+          :capa-status="detail?.capaStatus"
+          :step-accessible="stepAccessible"
+        />
+
+        <!-- 8D 步骤导航（选中 8D 时替代步骤条） -->
+        <div v-if="show8DView" class="eightd-sidebar-nav">
+          <div class="nav-title">8D 步骤</div>
+          <div
+            v-for="step in EIGHT_D_STEP_ORDER"
+            :key="step"
+            class="eightd-nav-item"
+            :class="{ active: activeStage === '8d', filled: has8DFilled(step) }"
+            @click="activeStage = '8d'"
+          >
+            <span class="eightd-nav-num">{{ step.slice(1) }}</span>
+            <span class="eightd-nav-label">{{ EIGHT_D_STEP_LABELS[step]?.replace(/^D\d\s/, '') }}</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 右侧主内容区 -->
+      <main class="detail-main">
+        <!-- 发起流程阶段 -->
+        <div v-if="activeStage === 'initiate'" class="stage-content">
+          <div class="stage-card">
+            <h3 class="stage-heading">发起整改流程</h3>
+            <p class="stage-desc">请选择整改流程类型，启动后系统将引导您完成整改闭环。</p>
+            <div class="initiate-options">
+              <div
+                v-for="opt in processOptions"
+                :key="opt.value"
+                class="initiate-card"
+                :class="{ selected: selectedProcess === opt.value }"
+                @click="selectedProcess = opt.value"
+              >
+                <div class="initiate-card-title">{{ opt.label }}</div>
+                <div class="initiate-card-desc">{{ opt.desc }}</div>
+              </div>
+            </div>
+            <el-button
+              type="primary"
+              :disabled="!selectedProcess || detail?.capaStatus !== '待发起'"
+              :loading="initiateLoading"
+              style="margin-top: 16px"
+              @click="doInitiate"
+            >
+              发起流程
+            </el-button>
+            <span v-if="detail?.capaStatus !== '待发起'" class="stage-hint">流程已发起，当前状态：{{ detail?.capaStatus }}</span>
+          </div>
+        </div>
+
+        <!-- 整改计划阶段 -->
+        <div v-if="activeStage === 'plan'" class="stage-content">
+          <ExceptionRectificationPlans
+            :exception-id="exceptionId"
+            :plans="detail?.rectificationPlans || []"
+            :readonly="detail?.status === '已闭环'"
+            @changed="loadDetail"
+          />
+        </div>
+
+        <!-- 改善措施阶段 -->
+        <div v-if="activeStage === 'measures'" class="stage-content">
+          <ExceptionActions
+            :exception-id="exceptionId"
+            :actions="detail?.improvementActions || []"
+            :readonly="detail?.status === '已闭环'"
+            @changed="loadDetail"
+          />
+        </div>
+
+        <!-- 验证闭环阶段 -->
+        <div v-if="activeStage === 'verify'" class="stage-content">
+          <ExceptionVerifications
+            :exception-id="exceptionId"
+            :records="detail?.verificationRecords || []"
+            :readonly="detail?.status === '已闭环'"
+            @changed="refreshAfterVerificationChange"
+          />
+          <CloseChecklist
+            v-if="detail?.status !== '已闭环'"
+            ref="closeChecklistRef"
+            :exception-id="exceptionId"
+            :close-loading="closeLoading"
+            @close="handleClose"
+          />
+          <div v-if="detail?.status === '已闭环'" class="close-done-notice">
+            该异常单已于 {{ detail.closedAt || '--' }} 闭环
+          </div>
+        </div>
+
+        <!-- 8D 报告阶段：卡片列表 -->
+        <div v-if="activeStage === '8d'" class="stage-content">
+          <ExceptionEightD
+            ref="eightDRef"
+            :exception-id="exceptionId"
+            :eight-d="detail?.eightD"
+            :readonly="detail?.status === '已闭环'"
+            :card-mode="true"
+            @updated="on8DUpdated"
+          />
+        </div>
+
+        <!-- 审核追溯阶段 -->
+        <div v-if="activeStage === 'audit'" class="stage-content">
+          <div class="stage-card">
+            <h3 class="stage-heading">审核追溯</h3>
+            <div v-if="auditLogs.length" class="audit-timeline">
+              <div
+                v-for="(log, idx) in auditLogs"
+                :key="log.id"
+                class="audit-entry"
+                :class="{ 'audit-first': idx === 0 }"
+              >
+                <!-- 时间轴节点 -->
+                <div class="audit-dot" :style="{ background: auditDotColor(log.operationType) }"></div>
+                <div class="audit-line" v-if="idx < auditLogs.length - 1"></div>
+
+                <!-- 日志内容 -->
+                <div class="audit-body">
+                  <div class="audit-header">
+                    <span class="audit-time">{{ formatAuditTime(log.operationTime) }}</span>
+                    <el-tag :type="auditTagType(log.operationType)" size="small">{{ AUDIT_OPERATION_LABELS[log.operationType] || log.operationType }}</el-tag>
+                    <span class="audit-table">{{ AUDIT_TABLE_LABELS[log.tableName] || log.tableName }}</span>
+                  </div>
+                  <div class="audit-operator-row">
+                    <span class="audit-operator">{{ log.operatorName || '系统' }}</span>
+                  </div>
+                  <div v-if="log.reason" class="audit-reason">{{ log.reason }}</div>
+                  <div v-if="auditExtras(log).length" class="audit-extras">
+                    <span v-for="(ex, ei) in auditExtras(log)" :key="ei" class="audit-extra-tag">
+                      {{ ex.label }}<b>{{ ex.value }}</b>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <el-empty v-else description="暂无审计记录" />
+          </div>
+        </div>
+      </main>
+    </div>
+    </template>
+
+    <!-- detail 为 null 且未报错时（理论上不会出现，兜底） -->
+    <div v-else class="error-state">
+      <el-empty description="暂无数据">
+        <el-button type="primary" @click="loadDetail">刷新</el-button>
+      </el-empty>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, nextTick, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ArrowLeft } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  getExceptionDetailApi,
+  getAuditTrailApi,
+  initiateProcessApi,
+  closeExceptionApi,
+  resetExceptionApi,
+} from '@/api/exception'
+import {
+  SEVERITY_COLORS,
+  EXCEPTION_STATUS_COLORS,
+  CAPA_STATUS_COLORS,
+  PROCESS_TYPE_LABELS,
+  PROCESS_TYPE_COLORS,
+  processIncludesCapa,
+  processIncludes8D,
+  EIGHT_D_STEP_ORDER,
+  EIGHT_D_STEP_LABELS,
+  AUDIT_OPERATION_LABELS,
+  AUDIT_TABLE_LABELS,
+} from '@/enums/exception'
+import type { ExceptionDetailVO, AuditLog } from '@/types/exception'
+import ProcessStepper from './components/ProcessStepper.vue'
+import ExceptionActions from './components/ExceptionActions.vue'
+import ExceptionVerifications from './components/ExceptionVerifications.vue'
+import ExceptionEightD from './components/ExceptionEightD.vue'
+import ExceptionRectificationPlans from './components/ExceptionRectificationPlans.vue'
+import CloseChecklist from './components/CloseChecklist.vue'
+import QualityRuleDialog from '@/components/quality/QualityRuleDialog.vue'
+
+const route = useRoute()
+const router = useRouter()
+const exceptionId = computed(() => Number(route.params.id))
+
+const loading = ref(false)
+const loadError = ref(false)
+const detail = ref<ExceptionDetailVO | null>(null)
+const auditLogs = ref<AuditLog[]>([])
+const activeStage = ref('initiate')
+
+const selectedProcess = ref('')
+const initiateLoading = ref(false)
+const closeLoading = ref(false)
+const resetLoading = ref(false)
+const eightDRef = ref<InstanceType<typeof ExceptionEightD>>()
+const closeChecklistRef = ref<InstanceType<typeof CloseChecklist>>()
+
+const processOptions = [
+  { value: 'CAPA', label: 'CAPA 整改', desc: '纠正与预防措施流程，含改善措施、验证与闭环' },
+  { value: '8D', label: '8D 报告', desc: '八步问题解决法，适用于复杂质量问题根因分析' },
+  { value: 'BOTH', label: 'CAPA + 8D', desc: '同时进行 CAPA 整改与 8D 报告，适用于重大异常' },
+]
+
+const showCapaProcess = computed(() => {
+  if (!detail.value) return false
+  // 只要流程已确定（非null, 非''），就显示步骤条
+  // 步骤条现在支持 CAPA/8D/BOTH 三种动态步骤列表
+  return !!(detail.value.processType) || detail.value.capaStatus === '待发起'
+})
+
+const show8DView = computed(() => {
+  return !!detail.value && processIncludes8D(detail.value.processType)
+})
+
+/**
+ * 步骤门禁：每个 key → boolean 表示该步骤是否可进入。
+ * 规则：上一阶段未产出数据时，后续步骤锁定。
+ */
+const stepAccessible = computed<Record<string, boolean>>(() => {
+  const d = detail.value
+  if (!d) return {}
+  const pt = d.processType
+  const is8D = processIncludes8D(pt)
+  const isCapa = processIncludesCapa(pt)
+  const hasPlans = (d.rectificationPlans || []).length > 0
+  const hasActions = (d.improvementActions || []).length > 0
+  const d8Done = d.eightD?.currentStep === 'D8'
+  const closed = d.status === '已闭环'
+  const initiated = d.capaStatus !== '待发起'
+
+  const map: Record<string, boolean> = {}
+
+  // 所有流程共用的规则
+  map['initiate'] = true
+  map['audit'] = closed
+
+  if (is8D && isCapa) {
+    // BOTH: initiate → plan → measures → 8d → verify → audit
+    map['plan'] = initiated
+    map['measures'] = hasPlans
+    map['8d'] = hasActions
+    map['verify'] = d8Done
+  } else if (is8D) {
+    // 纯 8D: initiate → 8d → measures → verify → audit
+    map['8d'] = initiated
+    map['measures'] = d8Done
+    map['verify'] = hasActions
+  } else {
+    // 纯 CAPA: initiate → plan → measures → verify → audit
+    map['plan'] = initiated
+    map['measures'] = hasPlans
+    map['verify'] = hasActions
+  }
+  return map
+})
+
+function has8DFilled(step: string): boolean {
+  if (!detail.value?.eightD) return false
+  const map: Record<string, keyof typeof detail.value.eightD> = {
+    D1: 'd1Team',
+    D2: 'd2ProblemDesc',
+    D3: 'd3Containment',
+    D4: 'd4RootCause',
+    D5: 'd5Corrective',
+    D6: 'd6Implementation',
+    D7: 'd7Preventive',
+    D8: 'd8Closure',
+  }
+  return !!(detail.value.eightD as any)[map[step]]
+}
+
+function severityStyle(v: string) {
+  const c = SEVERITY_COLORS[v] || '#8C9BA8'
+  return { color: c, background: c + '18', borderColor: c + '40' }
+}
+function statusStyle(v: string) {
+  const c = EXCEPTION_STATUS_COLORS[v] || '#8C9BA8'
+  return { color: c, background: c + '18', borderColor: c + '40' }
+}
+function processStyle(v: string) {
+  const c = PROCESS_TYPE_COLORS[v] || '#8C9BA8'
+  return { color: c, background: c + '18', borderColor: c + '40' }
+}
+
+async function loadDetail() {
+  if (!exceptionId.value) return
+  loading.value = true
+  loadError.value = false
+  try {
+    const res = await getExceptionDetailApi(exceptionId.value)
+    if (res.code === 0) {
+      detail.value = res.data
+      initStage()
+      loadAuditTrail()
+    } else {
+      loadError.value = true
+      console.error('加载异常详情失败：code=' + res.code + ' message=' + res.message)
+    }
+  } catch (e) {
+    loadError.value = true
+    console.error('加载异常详情失败', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+/** 验证记录会影响闭环资格；详情刷新完成后必须同步重新计算前置条件。 */
+async function refreshAfterVerificationChange() {
+  await loadDetail()
+  await nextTick()
+  await closeChecklistRef.value?.refresh()
+}
+
+function initStage() {
+  if (!detail.value) return
+  // 若已闭环，默认定位到审计追溯
+  if (detail.value.status === '已闭环') {
+    activeStage.value = 'audit'
+    return
+  }
+  // 尚未发起
+  if (!detail.value.processType || detail.value.capaStatus === '待发起') {
+    activeStage.value = 'initiate'
+    return
+  }
+
+  const has8D = processIncludes8D(detail.value.processType)
+  const hasCapa = processIncludesCapa(detail.value.processType)
+
+  // BOTH 模式：先计划 → 措施 → 8D → 验证
+  if (has8D && hasCapa) {
+    if (detail.value.capaStatus === '进行中') {
+      // 优先引导：没计划 → plan，有计划没措施 → measures，都有 → 8d
+      const plans = detail.value.rectificationPlans || []
+      if (plans.length === 0) { activeStage.value = 'plan'; return }
+      const actions = detail.value.improvementActions || []
+      if (actions.length === 0) { activeStage.value = 'measures'; return }
+      activeStage.value = '8d'
+    } else if (detail.value.capaStatus === '已完成') {
+      activeStage.value = 'verify'
+    } else {
+      activeStage.value = 'plan'
+    }
+    return
+  }
+
+  // 纯 8D 模式
+  if (has8D) {
+    if (detail.value.eightD?.currentStep === 'D8') {
+      const actions = detail.value.improvementActions || []
+      activeStage.value = actions.length > 0 ? 'verify' : 'measures'
+    } else {
+      activeStage.value = '8d'
+    }
+    return
+  }
+
+  // 纯 CAPA 模式：先计划 → 措施 → 验证
+  if (hasCapa) {
+    if (detail.value.capaStatus === '进行中') {
+      // 按顺序引导：没计划 → plan，有计划没措施 → measures，都有 → verify
+      const plans = detail.value.rectificationPlans || []
+      if (plans.length === 0) { activeStage.value = 'plan'; return }
+      const actions = detail.value.improvementActions || []
+      if (actions.length === 0) { activeStage.value = 'measures'; return }
+      activeStage.value = 'verify'
+    } else if (detail.value.capaStatus === '已完成') {
+      activeStage.value = 'verify'
+    } else {
+      activeStage.value = 'plan'
+    }
+  }
+}
+
+async function loadAuditTrail() {
+  try {
+    const res = await getAuditTrailApi(exceptionId.value)
+    if (res.code === 0) auditLogs.value = res.data
+  } catch (e) {
+    console.error('加载审计日志失败', e)
+  }
+}
+
+// ===== 审计辅助函数 =====
+
+/** 格式化审计时间：2026-07-21 14:35:22 */
+function formatAuditTime(t?: string) {
+  if (!t) return '-'
+  // 标准化格式
+  if (t.length >= 19) return t.slice(0, 10) + ' ' + t.slice(11, 19)
+  if (t.length >= 16) return t.slice(0, 10) + ' ' + t.slice(11, 16)
+  return t
+}
+
+function auditDotColor(opType: string): string {
+  const map: Record<string, string> = { CREATE: '#3E7A4E', UPDATE: '#3E6B95', DELETE: '#B84B3E' }
+  return map[opType] || '#8C9BA8'
+}
+
+function auditTagType(opType: string): 'success' | 'warning' | 'danger' | 'info' {
+  const map: Record<string, 'success' | 'warning' | 'danger' | 'info'> = {
+    CREATE: 'success', UPDATE: 'warning', DELETE: 'danger'
+  }
+  return map[opType] || 'info'
+}
+
+/**
+ * 从 beforeData/afterData JSONB 提取关键人字段。
+ * 显示如：负责人 / 验证人 / 处理人 等。
+ */
+function auditExtras(log: AuditLog): { label: string; value: string }[] {
+  const result: { label: string; value: string }[] = []
+  const data = log.afterData || log.beforeData
+  if (!data) return result
+
+  try {
+    const obj = JSON.parse(data)
+    // 提取常见的人员/状态字段
+    const fields: [string, string][] = [
+      ['ownerName', '负责人'], ['ownerId', '负责人ID'],
+      ['verifierName', '验证人'], ['verifierId', '验证人ID'],
+      ['handlerId', '处理人ID'], ['handlerName', '处理人'],
+      ['result', '验证结果'], ['status', '状态'],
+      ['actionType', '措施类型'], ['content', '内容'],
+      ['processType', '流程类型'],
+      ['planName', '计划名称'], ['objective', '目标'],
+    ]
+    for (const [key, label] of fields) {
+      if (obj[key] !== undefined && obj[key] !== null && obj[key] !== '') {
+        result.push({ label, value: String(obj[key]) })
+      }
+    }
+  } catch {
+    // JSON 解析失败则忽略
+  }
+  return result.slice(0, 6)
+}
+
+async function doInitiate() {
+  if (!selectedProcess.value) return
+  initiateLoading.value = true
+  try {
+    const res = await initiateProcessApi(exceptionId.value, selectedProcess.value)
+    if (res.code === 0) {
+      ElMessage.success('整改流程已发起')
+      detail.value = { ...detail.value!, ...res.data }
+      initStage()
+    }
+  } catch (e) {
+    console.error('发起流程失败', e)
+  } finally {
+    initiateLoading.value = false
+  }
+}
+
+async function handleClose(closeReason: string) {
+  try {
+    await ElMessageBox.confirm('确认闭环该异常单？闭环后无法修改整改数据。', '确认闭环', { type: 'warning' })
+  } catch {
+    return
+  }
+  closeLoading.value = true
+  try {
+    const res = await closeExceptionApi(exceptionId.value, { closeReason })
+    if (res.code === 0) {
+      ElMessage.success('异常单已闭环')
+      loadDetail()
+    }
+  } catch (e) {
+    console.error('闭环失败', e)
+  } finally {
+    closeLoading.value = false
+  }
+}
+
+async function handleReset() {
+  try {
+    await ElMessageBox.confirm('确认将该异常单重置为最初状态？关联的改善措施、验证记录、8D 报告、整改计划都将被清空。', '确认重置', { type: 'warning' })
+  } catch {
+    return
+  }
+  resetLoading.value = true
+  try {
+    const res = await resetExceptionApi(exceptionId.value)
+    if (res.code === 0) {
+      ElMessage.success('已重置为待整改状态')
+      loadDetail()
+    }
+  } catch (e) {
+    console.error('重置失败', e)
+  } finally {
+    resetLoading.value = false
+  }
+}
+
+function on8DUpdated(eightD: any) {
+  if (detail.value) {
+    detail.value.eightD = eightD
+    // D8 完成后：纯8D模式引导到改善措施，BOTH模式引导到验证
+    if (eightD?.currentStep === 'D8' && detail.value.status !== '已闭环') {
+      const isPure8D = detail.value.processType === '8D'
+      if (isPure8D) {
+        ElMessage.success('8D 报告全部完成，请进入改善措施阶段执行具体的纠正/预防措施')
+        setTimeout(() => { activeStage.value = 'measures'; loadDetail() }, 800)
+      } else {
+        ElMessage.success('8D 报告全部完成，请前往验证闭环阶段确认整改效果')
+        setTimeout(() => { activeStage.value = 'verify'; loadDetail() }, 800)
+      }
+    }
+  }
+}
+
+function goBack() {
+  router.push('/exception')
+}
+
+onMounted(loadDetail)
+watch(exceptionId, loadDetail)
+</script>
+
+<style scoped>
+.exception-detail-page {
+  padding: 16px 24px 48px;
+  max-width: 1200px;
+  margin: 0 auto;
+  font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  color: #2a2a2a;
+}
+.detail-topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #e3e0dc;
+}
+.topbar-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.topbar-no {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1b3a5b;
+}
+.topbar-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 2px;
+  border: 1px solid;
+}
+.detail-layout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+.detail-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: sticky;
+  top: 16px;
+}
+.detail-main {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 摘要卡片 */
+.summary-card {
+  background: #fff;
+  border: 1px solid #e3e0dc;
+  border-radius: 6px;
+  padding: 16px;
+}
+.summary-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1b3a5b;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e3e0dc;
+}
+.summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+}
+.summary-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.summary-field label {
+  font-size: 11px;
+  color: #8c9ba8;
+}
+.summary-field span {
+  font-size: 12px;
+  color: #2a2a2a;
+  word-break: break-all;
+}
+.summary-field .mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+.summary-desc {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #f0ede9;
+}
+.summary-desc label {
+  font-size: 11px;
+  color: #8c9ba8;
+}
+.summary-desc p {
+  font-size: 12px;
+  color: #2a2a2a;
+  line-height: 1.5;
+  margin: 4px 0 0;
+}
+
+/* 8D 侧边导航 */
+.eightd-sidebar-nav {
+  background: #faf9f7;
+  border: 1px solid #e3e0dc;
+  border-radius: 6px;
+  padding: 12px;
+}
+.nav-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1b3a5b;
+  margin-bottom: 10px;
+}
+.eightd-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-bottom: 2px;
+}
+.eightd-nav-item:hover {
+  background: rgba(27, 58, 91, 0.05);
+}
+.eightd-nav-item.active {
+  background: rgba(27, 58, 91, 0.08);
+}
+.eightd-nav-item.filled::after {
+  content: '✓';
+  margin-left: auto;
+  font-size: 11px;
+  color: #3e7a4e;
+  font-weight: 700;
+}
+.eightd-nav-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #e3e0dc;
+  color: #5b6770;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.eightd-nav-item.active .eightd-nav-num {
+  background: #1b3a5b;
+  color: #fff;
+}
+.eightd-nav-label {
+  font-size: 12px;
+  color: #5b6770;
+}
+
+/* 阶段内容区 */
+.stage-content {
+  animation: fadeIn 0.2s ease;
+}
+.stage-card {
+  background: #fff;
+  border: 1px solid #e3e0dc;
+  border-radius: 6px;
+  padding: 20px;
+}
+.stage-heading {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1b3a5b;
+  margin: 0 0 8px;
+}
+.stage-desc {
+  font-size: 13px;
+  color: #8c9ba8;
+  margin: 0 0 16px;
+}
+.stage-hint {
+  display: inline-block;
+  margin-left: 12px;
+  font-size: 12px;
+  color: #b8763e;
+}
+
+/* 发起流程选项卡片 */
+.initiate-options {
+  display: flex;
+  gap: 12px;
+}
+.initiate-card {
+  flex: 1;
+  background: #faf9f7;
+  border: 2px solid #e3e0dc;
+  border-radius: 6px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.initiate-card:hover {
+  border-color: #b8763e;
+}
+.initiate-card.selected {
+  border-color: #1b3a5b;
+  background: rgba(27, 58, 91, 0.04);
+}
+.initiate-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1b3a5b;
+  margin-bottom: 6px;
+}
+.initiate-card-desc {
+  font-size: 12px;
+  color: #8c9ba8;
+  line-height: 1.4;
+}
+
+/* 闭环面板 */
+.close-panel {
+  margin-top: 16px;
+  padding: 16px;
+  background: #faf9f7;
+  border: 1px solid #e3e0dc;
+  border-radius: 6px;
+}
+.close-panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1b3a5b;
+  margin-bottom: 10px;
+}
+
+/* 已闭环提示 */
+.close-done-notice {
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: #f2f8f2;
+  border: 1px solid #c5dcc5;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #3e7a4e;
+  font-weight: 500;
+}
+
+/* 检验来源卡片 */
+.inspection-source-card {
+  border-color: #f0d9c6;
+}
+.tag-ng {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #b84b3e;
+  background: #b84b3e18;
+  border: 1px solid #b84b3e40;
+  border-radius: 2px;
+  padding: 1px 6px;
+}
+
+/* 审计时间线 - 增强可视化 */
+.audit-timeline {
+  position: relative;
+  padding-left: 0;
+}
+.audit-entry {
+  position: relative;
+  display: flex;
+  gap: 14px;
+  padding-bottom: 20px;
+  padding-left: 0;
+}
+.audit-entry:last-child {
+  padding-bottom: 0;
+}
+.audit-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 5px;
+  z-index: 1;
+  box-shadow: 0 0 0 3px rgba(0,0,0,0.06);
+}
+.audit-line {
+  position: absolute;
+  left: 4.5px;
+  top: 18px;
+  bottom: 0;
+  width: 1px;
+  background: #e3e0dc;
+}
+.audit-body {
+  flex: 1;
+  min-width: 0;
+}
+.audit-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.audit-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #8c9ba8;
+}
+.audit-operator-row {
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+.audit-operator-row .audit-operator {
+  font-weight: 600;
+  color: #1b3a5b;
+}
+.audit-table {
+  font-size: 11px;
+  color: #8c9ba8;
+}
+.audit-reason {
+  margin-top: 2px;
+  color: #5b6770;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.audit-extras {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.audit-extra-tag {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  background: #f5f3f0;
+  border-radius: 3px;
+  color: #5b6770;
+}
+.audit-extra-tag b {
+  color: #1b3a5b;
+  margin-left: 4px;
+}
+.audit-first .audit-dot {
+  box-shadow: 0 0 0 4px rgba(27, 58, 91, 0.15);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 加载失败 / 空数据状态 */
+.error-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+  padding: 48px;
+}
+
+@media (max-width: 900px) {
+  .detail-layout {
+    flex-direction: column;
+  }
+  .detail-sidebar {
+    width: 100%;
+    position: static;
+  }
+  .initiate-options {
+    flex-direction: column;
+  }
+}
+.rule-source-card{border-left:3px solid #b8763e}.rule-decision-line{display:flex;align-items:center;gap:8px;margin:10px 0}.rule-decision-line span{padding:3px 8px;border:1px solid;border-radius:3px;font-size:11px;font-weight:700}.rule-decision-line .rule-serious{border-color:#e6aaa4;background:#fff3f1;color:#b84b3e}.rule-decision-line .rule-general{border-color:#c4d6e3;background:#f3f8fb;color:#4c708b}.rule-decision-line b{color:#17374e;font-family:JetBrains Mono,monospace}.rule-decision-line em{margin-left:auto;color:#b45d28;font-size:11px;font-style:normal}.rule-source-card>p{margin:0 0 12px;color:#536c7e;font-size:12px;line-height:1.6}
+</style>

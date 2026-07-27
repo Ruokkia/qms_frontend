@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Production build output
+dist/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# TypeScript incremental build metadata
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test reports and local tooling state
+coverage/
+playwright-report/
+test-results/
+.playwright/
+
+# Editor and operating-system files
+.idea/
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+.DS_Store
+Thumbs.db
