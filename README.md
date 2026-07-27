@@ -1,2 +1,0 @@
-# cornley-qms-web
-
