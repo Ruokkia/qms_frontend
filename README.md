@@ -1,6 +1,6 @@
 # qms-frontend
 
-康力质量管理系统（QMS）前端工程。从 `D:\Kangli_project` 合并而来（2026-07-17）。
+康立质量管理系统（QMS）前端工程
 
 ## 技术栈
 - Vue 3.5 + TypeScript 5.6
