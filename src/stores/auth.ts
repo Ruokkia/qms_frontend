@@ -28,11 +28,11 @@ export const ACCT_MAP: Record<string, string> = {
 export const ROLE_PERMISSIONS: Record<string, ModuleKey[]> = {
   R00: ['systemAdmin', 'trace', 'incoming', 'exception', 'fai', 'spc', 'productionDefect', 'processTools', 'finishedGoods'],
   R01: ['trace'],
-  R02: ['trace', 'incoming', 'fai', 'spc', 'exception', 'productionDefect', 'processTools'],
-  R03: ['trace', 'incoming', 'exception', 'fai', 'spc', 'productionDefect', 'processTools'],
-  R04: ['trace', 'incoming', 'exception', 'fai', 'spc', 'productionDefect', 'processTools'],
-  R05: ['incoming', 'exception'],
-  R06: ['trace', 'incoming', 'exception', 'fai', 'spc', 'productionDefect', 'processTools'],
+  R02: ['trace', 'incoming', 'fai', 'spc', 'exception', 'productionDefect', 'processTools', 'finishedGoods'],
+  R03: ['trace', 'incoming', 'exception', 'fai', 'spc', 'productionDefect', 'processTools', 'finishedGoods'],
+  R04: ['trace', 'incoming', 'exception', 'fai', 'spc', 'productionDefect', 'processTools', 'finishedGoods'],
+  R05: ['incoming', 'exception', 'finishedGoods'],
+  R06: ['trace', 'incoming', 'exception', 'fai', 'spc', 'productionDefect', 'processTools', 'finishedGoods'],
 }
 
 /** 分公司列表 */

@@ -124,6 +124,7 @@ export interface EightDReport {
   d6Implementation?: string
   d7Preventive?: string
   d8Closure?: string
+  version?: number
   plantCode?: string
   plantName?: string
   createdBy?: string
@@ -143,6 +144,7 @@ export interface EightDSaveDTO {
   d6Implementation?: string
   d7Preventive?: string
   d8Closure?: string
+  version?: number
 }
 
 /** 异常单详情（含改善措施 + 验证记录 + 8D + 关联来料） */

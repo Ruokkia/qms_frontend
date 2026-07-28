@@ -72,6 +72,7 @@ const emit = defineEmits<{
 
 const stepOrder = EIGHT_D_STEP_ORDER
 const currentStep = ref('D1')
+const currentVersion = ref<number | undefined>(undefined)
 const saveLoading = ref(false)
 const nextLoading = ref(false)
 const prevLoading = ref(false)
@@ -102,6 +103,7 @@ watch(
         d8Closure: val.d8Closure || '',
       }
       currentStep.value = val.currentStep || 'D1'
+      currentVersion.value = val.version
     }
   },
   { immediate: true },
@@ -151,10 +153,12 @@ async function save() {
     const payload: EightDSaveDTO = {
       currentStep: currentStep.value,
       ...form.value,
+      version: currentVersion.value,
     }
     const res = await saveEightDApi(props.exceptionId, payload)
     if (res.code === 0) {
       ElMessage.success('保存成功')
+      currentVersion.value = res.data.version
       emit('updated', res.data)
     }
   } catch (e) {
