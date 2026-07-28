@@ -167,6 +167,7 @@ import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { traceQueryApi } from '@/api/trace'
+import { getErrorMessage } from '@/api/request-error'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import {
@@ -212,18 +213,18 @@ async function openSampleData() {
     sampleNodes.value = nodes.data.data || []
     sampleRelations.value = relations.data.data || []
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message || '示例数据加载失败，请确认后端已启动')
+    ElMessage.error(getErrorMessage(e, '示例数据加载失败，请确认后端已启动'))
   } finally { sampleLoading.value = false }
 }
 const entry = ref({ nodeType: 'MATERIAL', barcode: '', name: '', materialCode: '', materialBatchNo: '' })
 const relation = ref({ parentNodeId: '', childNodeId: '', quantity: '' })
 async function saveEntry() {
   try { await axios.post(`${incomingTraceBase}/nodes`, entry.value, { headers: { Authorization: `Bearer ${sessionStorage.getItem('qms_token') || ''}` } }); ElMessage.success('节点已保存，可继续建立关系'); entryVisible.value = false }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message || '节点保存失败，请检查必填字段和条码是否重复') }
+  catch (e: any) { ElMessage.error(getErrorMessage(e, '节点保存失败，请检查必填字段和条码是否重复')) }
 }
 async function saveRelation() {
   try { await axios.post(`${incomingTraceBase}/relations`, relation.value, { headers: { Authorization: `Bearer ${sessionStorage.getItem('qms_token') || ''}` } }); ElMessage.success('关系已保存'); relation.value = { parentNodeId: '', childNodeId: '', quantity: '' } }
-  catch (e: any) { ElMessage.error(e?.response?.data?.message || '关系保存失败，请检查节点 ID 和是否形成环路') }
+  catch (e: any) { ElMessage.error(getErrorMessage(e, '关系保存失败，请检查节点 ID 和是否形成环路')) }
 }
 
 // ── 追溯查询 ────────────────────────────────────────────────
@@ -276,8 +277,7 @@ async function doQuery() {
       errorMsg.value = res.message || '追溯查询失败'
     }
   } catch (e: any) {
-    const backendMsg = e?.response?.data?.message
-    errorMsg.value = backendMsg || e?.message || '追溯查询失败'
+    errorMsg.value = getErrorMessage(e, '追溯查询失败')
   } finally {
     loading.value = false
   }

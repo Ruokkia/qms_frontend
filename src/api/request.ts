@@ -1,6 +1,7 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig, type AxiosResponse } from 'axios'
 import { ElMessage } from 'element-plus'
 import type { ApiResult } from '@/types'
+import { createRequestError, normalizeRequestError, type QmsRequestError } from './request-error'
 
 // 统一使用相对路径 /api/v1
 // 开发环境通过 Vite 代理转发至后端，生产环境由 Spring Boot 处理同源请求
@@ -14,7 +15,11 @@ const service: AxiosInstance = axios.create({
 
 // ── Token 管理（直接读写 sessionStorage，避免与 store 循环依赖） ──
 let isRefreshing = false
-let refreshQueue: Array<() => void> = []
+let refreshQueue: Array<{
+  config: InternalAxiosRequestConfig
+  resolve: (value: AxiosResponse<ApiResult>) => void
+  reject: (reason?: unknown) => void
+}> = []
 
 function getToken(): string | null {
   return sessionStorage.getItem('qms_token')
@@ -65,16 +70,20 @@ service.interceptors.response.use(
       return handleTokenExpired(response.config)
     }
 
-    ElMessage.error(res.message || '请求失败')
-    return Promise.reject(new Error(res.message || 'Error'))
+    const error = createRequestError(res.message || '请求失败，请稍后重试', 'business', {
+      notified: true,
+    })
+    ElMessage.error(error.message)
+    return Promise.reject(error)
   },
   (error) => {
     // HTTP 层 401（兜底，后端目前统一返回 200 + code）
     if (error.response?.status === 401 && !(error.config as any)?._isRefresh) {
       return handleTokenExpired(error.config)
     }
-    ElMessage.error(error.message || '网络异常')
-    return Promise.reject(error)
+    const normalizedError = normalizeRequestError(error, true)
+    ElMessage.error(normalizedError.message)
+    return Promise.reject(normalizedError)
   },
 )
 
@@ -85,15 +94,15 @@ async function handleTokenExpired(originalConfig: any): Promise<any> {
   // 无 refresh token → 跳登录
   if (!refreshToken) {
     clearAuthAndRedirect()
-    return Promise.reject(new Error('登录已过期，请重新登录'))
+    const error = createRequestError('登录已过期，请重新登录', 'unauthorized', { notified: true })
+    ElMessage.error(error.message)
+    return Promise.reject(error)
   }
 
   // 已有刷新请求进行中 → 排队等待
   if (isRefreshing) {
     return new Promise((resolve, reject) => {
-      refreshQueue.push(() => {
-        service(originalConfig).then(resolve).catch(reject)
-      })
+      refreshQueue.push({ config: originalConfig, resolve, reject })
     })
   }
 
@@ -110,18 +119,23 @@ async function handleTokenExpired(originalConfig: any): Promise<any> {
       // 重试原请求
       const retryRes = await service(originalConfig)
       // 执行队列中等待的请求
-      refreshQueue.forEach((cb) => cb())
+      refreshQueue.forEach(({ config, resolve, reject }) => {
+        service(config).then(resolve).catch(reject)
+      })
       refreshQueue = []
       return retryRes
-    } else {
-      clearAuthAndRedirect()
-      ElMessage.error(data.message || '登录已过期，请重新登录')
-      return Promise.reject(new Error('登录已过期'))
     }
-  } catch {
+    throw createRequestError(data.message || '登录已过期，请重新登录', 'unauthorized')
+  } catch (error) {
     clearAuthAndRedirect()
-    ElMessage.error('登录已过期，请重新登录')
-    return Promise.reject(new Error('登录已过期'))
+    const authError: QmsRequestError = error instanceof Error && error.name === 'QmsRequestError'
+      ? error as QmsRequestError
+      : createRequestError('登录已过期，请重新登录', 'unauthorized')
+    const notifiedError = createRequestError(authError.message, authError.kind, { notified: true })
+    ElMessage.error(notifiedError.message)
+    refreshQueue.forEach(({ reject }) => reject(notifiedError))
+    refreshQueue = []
+    return Promise.reject(notifiedError)
   } finally {
     isRefreshing = false
   }

@@ -213,6 +213,7 @@ import {
 } from '@/api/finishedGoods'
 import { bindMaterialToFinishedGoodsApi } from '@/api/trace'
 import { getMaterialInspectionDetailApi } from '@/api/incoming'
+import { getErrorMessage, isErrorNotified } from '@/api/request-error'
 import type { FinishedGoodsInspection, FinishedGoodsListParams } from '@/types/finishedGoods'
 import type { MaterialInspection } from '@/types/incoming'
 import FinishedGoodsDetailDialog from './components/FinishedGoodsDetailDialog.vue'
@@ -344,7 +345,7 @@ async function onDetailSaved(data: Partial<FinishedGoodsInspection>) {
       }
     }
   } catch (e: any) {
-    ElMessage.error('保存失败：' + (e?.message || '未知错误'))
+    if (!isErrorNotified(e)) ElMessage.error(`保存失败：${getErrorMessage(e)}`)
     console.error('保存成品检验记录失败', e)
   }
 }
@@ -364,7 +365,7 @@ async function deleteRecord(id: number) {
     }
   } catch (e: any) {
     if (e === 'cancel') return
-    ElMessage.error('删除失败：' + (e?.message || '未知错误'))
+    if (!isErrorNotified(e)) ElMessage.error(`删除失败：${getErrorMessage(e)}`)
   }
 }
 
@@ -397,7 +398,7 @@ async function queryMaterial() {
       ElMessage.error('未找到该来料记录')
     }
   } catch (e: any) {
-    ElMessage.error('查询失败：' + (e?.message || '未知错误'))
+    if (!isErrorNotified(e)) ElMessage.error(`查询失败：${getErrorMessage(e)}`)
   } finally {
     queryingMat.value = false
   }
@@ -417,7 +418,7 @@ async function doBind() {
       }
     }
   } catch (e: any) {
-    ElMessage.error('绑定失败：' + (e?.message || '未知错误'))
+    if (!isErrorNotified(e)) ElMessage.error(`绑定失败：${getErrorMessage(e)}`)
   } finally {
     binding.value = false
   }

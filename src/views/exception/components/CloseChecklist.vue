@@ -51,6 +51,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { getCloseReadinessApi } from '@/api/exception'
+import { getErrorMessage } from '@/api/request-error'
 import type { CloseReadinessVO } from '@/types/exception'
 
 const props = defineProps<{
@@ -79,7 +80,7 @@ async function load() {
       checks.value = res.data.checks
     }
   } catch (e: any) {
-    checkError.value = e?.message || '加载闭环检查失败'
+    checkError.value = getErrorMessage(e, '加载闭环检查失败')
   } finally {
     loading.value = false
   }

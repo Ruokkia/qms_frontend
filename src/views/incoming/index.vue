@@ -277,6 +277,7 @@ import TrendChart from './components/TrendChart.vue'
 import SupplierRankChart from './components/SupplierRankChart.vue'
 import IncomingDetailDialog from './components/IncomingDetailDialog.vue'
 import QualityRuleDialog from '@/components/quality/QualityRuleDialog.vue'
+import { getErrorMessage, isErrorNotified } from '@/api/request-error'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -420,7 +421,7 @@ async function openRectification(row: MaterialInspection) {
     }
   } catch (e: any) {
     // 后端 Conflict 已有的兜底
-    const msg = e?.message || ''
+    const msg = getErrorMessage(e, '')
     if (msg.includes('已关联异常单') || msg.includes('BAD_REQUEST')) {
       const existing = await getExceptionBySourceIdApi(row.id)
       if (existing.code === 0 && existing.data != null) {
@@ -428,7 +429,7 @@ async function openRectification(row: MaterialInspection) {
         return
       }
     }
-    ElMessage.error('操作失败：' + (msg || '未知错误'))
+    if (!isErrorNotified(e)) ElMessage.error(`操作失败：${msg || '请稍后重试'}`)
     console.error('整改入口失败', e)
   }
 }
@@ -496,7 +497,7 @@ async function onDetailSaved(data: Partial<MaterialInspection>) {
       }
     }
   } catch (e: any) {
-    ElMessage.error('保存失败：' + (e?.message || '未知错误'))
+    if (!isErrorNotified(e)) ElMessage.error(`保存失败：${getErrorMessage(e)}`)
     console.error('保存物料检验记录失败', e)
   } finally {
     savingDetail.value = false
@@ -518,7 +519,7 @@ async function deleteRecord(id: number) {
     }
   } catch (e: any) {
     if (e === 'cancel') return
-    ElMessage.error('删除失败：' + (e?.message || '未知错误'))
+    if (!isErrorNotified(e)) ElMessage.error(`删除失败：${getErrorMessage(e)}`)
   }
 }
 

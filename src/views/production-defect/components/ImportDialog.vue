@@ -59,6 +59,7 @@ import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import type { UploadFile, UploadInstance } from 'element-plus'
 import { importExcelApi } from '@/api/production-defect'
+import { getErrorMessage, isErrorNotified } from '@/api/request-error'
 import type { ImportResult } from '@/types/production-defect'
 
 const props = defineProps<{ modelValue: boolean }>()
@@ -90,7 +91,7 @@ async function onImport() {
     ElMessage.success('导入完成')
     emit('success')
   } catch (e: any) {
-    ElMessage.error(e?.message || '导入失败')
+    if (!isErrorNotified(e)) ElMessage.error(getErrorMessage(e, '导入失败，请稍后重试'))
   } finally {
     loading.value = false
   }
