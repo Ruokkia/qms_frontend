@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { reportRuntimeError } from '@/utils/error-reporter'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -85,6 +86,10 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHistory(),
   routes,
+})
+
+router.onError((error, to) => {
+  reportRuntimeError(error, `路由加载异常: ${String(to.fullPath)}`, '页面加载失败，请刷新后重试')
 })
 
 /** 路由守卫：权限校验（key 必须与路由记录的 name 完全一致） */
