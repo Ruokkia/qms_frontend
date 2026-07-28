@@ -174,6 +174,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -190,6 +191,7 @@ import {
 import type { AdminUser, RolePermission, AdminAudit } from '@/types'
 
 const auth = useAuthStore()
+const router = useRouter()
 const activeTab = ref<'users' | 'roles' | 'audit'>('users')
 
 const roleOptions = [
@@ -386,6 +388,7 @@ async function saveMenuPermissions() {
       reason: '调整角色菜单权限',
       version: editingMenuRole.value.version,
     })
+    if (await endSessionAfterOwnRoleUpdate(editingMenuRole.value.roleCode)) return
     ElMessage.success('菜单权限已更新，角色重新登录后生效')
     menuDialogVisible.value = false
     await loadRoles()
@@ -404,6 +407,13 @@ function openRoleEdit(row: RolePermission) {
   roleForm.permissions = [...(row.permissions || [])]
   roleDialogVisible.value = true
 }
+async function endSessionAfterOwnRoleUpdate(roleCode: string) {
+  if (auth.roleId !== roleCode) return false
+  auth.clearSession()
+  ElMessage.warning('自身角色权限已更新，请重新登录后继续操作')
+  await router.replace('/login')
+  return true
+}
 async function saveRole() {
   if (!editingRole.value) return
   roleSaving.value = true
@@ -414,6 +424,7 @@ async function saveRole() {
       reason: '系统管理后台调整',
       version: editingRole.value.version,
     })
+    if (await endSessionAfterOwnRoleUpdate(editingRole.value.roleCode)) return
     ElMessage.success('权限已更新')
     roleDialogVisible.value = false
     await loadRoles()

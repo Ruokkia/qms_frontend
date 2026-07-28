@@ -122,6 +122,11 @@ export const useAuthStore = defineStore('auth', () => {
     } catch {
       // 接口失败仍清前端状态，不阻塞登出
     }
+    clearSession()
+  }
+
+  /** 仅清除本地会话：用于权限变更后，旧 Token 已被服务端主动失效的场景。 */
+  function clearSession() {
     user.value = null
     token.value = ''
     refreshToken.value = ''
@@ -144,6 +149,7 @@ export const useAuthStore = defineStore('auth', () => {
     setUser,
     updateToken,
     switchArea,
+    clearSession,
     restore,
     logout,
   }
