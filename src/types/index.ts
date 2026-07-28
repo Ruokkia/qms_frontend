@@ -52,6 +52,7 @@ export interface UserInfo {
   roleName: string        // 角色名称，如 操作工
   plantCode: PlantCode    // 分公司编码 SZ=深圳 / MZ=梅州
   plantName: string       // 分公司名称，如 深圳
+  canSwitchArea: boolean  // 是否具备全部分公司数据范围
   status?: number         // 状态 1=启用 0=禁用（/auth/me 返回）
   lastLoginAt?: string    // 最后登录时间（/auth/me 返回）
   modulePermissions?: ModuleKey[] // 后端授权的可见菜单，登录后生效

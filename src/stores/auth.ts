@@ -58,8 +58,8 @@ export const useAuthStore = defineStore('auth', () => {
     return user.value.modulePermissions || ROLE_PERMISSIONS[user.value.roleCode] || []
   })
 
-  /** 是否可切换分公司（仅 R06 质量经理） */
-  const canSwitchArea = computed(() => user.value?.roleCode === 'R06' || user.value?.roleCode === 'R00')
+  /** 是否可切换分公司（由后端按角色数据范围授权） */
+  const canSwitchArea = computed(() => user.value?.canSwitchArea === true)
 
   /** 是否有某模块权限 */
   function hasModule(key: ModuleKey): boolean {
