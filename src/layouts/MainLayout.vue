@@ -96,7 +96,7 @@ const currentArea = ref<PlantCode>(auth.plantCode)
 const visibleNavGroups = computed(() => {
   return NAV_GROUPS.map((g) => ({
     ...g,
-    items: g.items.filter((item) => item.roles.includes(auth.roleId)),
+    items: g.items.filter((item) => item.key === 'dashboard' || auth.hasModule(item.key)),
   })).filter((g) => g.items.length > 0)
 })
 

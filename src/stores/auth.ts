@@ -32,7 +32,7 @@ export const ROLE_PERMISSIONS: Record<string, ModuleKey[]> = {
   R03: ['trace', 'incoming', 'exception', 'fai', 'spc', 'productionDefect', 'processTools', 'finishedGoods'],
   R04: ['trace', 'incoming', 'exception', 'fai', 'spc', 'productionDefect', 'processTools', 'finishedGoods'],
   R05: ['incoming', 'exception', 'finishedGoods'],
-  R06: ['trace', 'incoming', 'exception', 'fai', 'spc', 'productionDefect', 'processTools', 'finishedGoods'],
+  R06: ['systemAdmin', 'trace', 'incoming', 'exception', 'fai', 'spc', 'productionDefect', 'processTools', 'finishedGoods'],
 }
 
 /** 分公司列表 */
@@ -55,7 +55,7 @@ export const useAuthStore = defineStore('auth', () => {
   /** 该用户可访问的模块列表（以 roleCode 匹配，非 userId） */
   const allowedModules = computed<ModuleKey[]>(() => {
     if (!user.value) return []
-    return ROLE_PERMISSIONS[user.value.roleCode] || []
+    return user.value.modulePermissions || ROLE_PERMISSIONS[user.value.roleCode] || []
   })
 
   /** 是否可切换分公司（仅 R06 质量经理） */

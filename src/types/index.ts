@@ -54,6 +54,7 @@ export interface UserInfo {
   plantName: string       // 分公司名称，如 深圳
   status?: number         // 状态 1=启用 0=禁用（/auth/me 返回）
   lastLoginAt?: string    // 最后登录时间（/auth/me 返回）
+  modulePermissions?: ModuleKey[] // 后端授权的可见菜单，登录后生效
 }
 
 /** 登录响应（含 JWT） */
@@ -68,7 +69,8 @@ export interface LoginResponse {
 export interface LoginParams {
   account: string
   password: string
-  plantCode: PlantCode
+  /** 分公司编码（可选，登录不再强制要求，默认按账号所属公司） */
+  plantCode?: PlantCode
 }
 
 /** 刷新 Token 请求参数 */
@@ -126,7 +128,7 @@ export interface NavItem {
 
 export interface AdminUser { id: number; account: string; realName: string; roleCode: string; plantCode: PlantCode; plantName: string; status: number; authVersion: number; lastLoginAt?: string }
 export interface PermissionDisplay { code: string; name: string; description: string }
-export interface RolePermission { roleCode: string; roleName: string; dataScope: 'OWN_PLANT' | 'ALL_PLANTS'; dataScopeName?: string; dataScopeDescription?: string; permissions: string[]; permissionDetails?: PermissionDisplay[] }
+export interface RolePermission { roleCode: string; roleName: string; dataScope: 'OWN_PLANT' | 'ALL_PLANTS'; dataScopeName?: string; dataScopeDescription?: string; version: number; permissions: string[]; permissionDetails?: PermissionDisplay[] }
 export interface AdminAudit { id: number; operationType: string; operatorName: string; afterData?: string; ipAddress?: string; operationTime?: string; reason?: string }
 
 /** 角色配置 */

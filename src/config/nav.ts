@@ -17,7 +17,7 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       },
     ],
   },
-  { label: '系统管理', items: [{ key: 'systemAdmin', title: '系统管理', icon: 'Setting', path: '/admin', roles: ['R00'] }] },
+  { label: '系统管理', items: [{ key: 'systemAdmin', title: '系统管理', icon: 'Setting', path: '/admin', roles: ['R00', 'R06'] }] },
   {
     label: '过程数据采集',
     items: [
