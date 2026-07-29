@@ -9,7 +9,7 @@ import type { PageParams } from '@/types'
 /** 升级记录实体（对齐 qms.escalation 表） */
 export interface Escalation {
   id: number
-  supplierId?: number
+  supplierId?: string
   supplierName?: string
   supplierCode?: string
   materialCode?: string
@@ -20,6 +20,7 @@ export interface Escalation {
   processStage?: string
   actionPlan?: string
   ownerName?: string
+  planFilledBy?: string
   dueDate?: string
   executionRecord?: string
   executedBy?: string
@@ -49,12 +50,13 @@ export interface Escalation {
 /** 升级列表查询参数 */
 export interface EscalationListParams extends PageParams {
   status?: string
-  supplierId?: number
+  supplierId?: string
 }
 
 /** 发起升级请求 */
 export interface EscalationCreateDTO {
-  supplierId: number
+  supplierId: string
+  materialCode?: string
   escalationReason: string
   relatedExceptionIds?: string
   escalationAction: string
