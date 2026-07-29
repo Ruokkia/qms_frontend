@@ -52,41 +52,17 @@
           <el-table-column label="数据范围" min-width="140">
             <template #default="{ row }">{{ row.dataScopeName || (row.dataScope === 'ALL_PLANTS' ? '全部分公司' : '本分公司') }}</template>
           </el-table-column>
-          <el-table-column label="已授权操作" min-width="320">
+          <el-table-column label="已授权模块" min-width="150">
             <template #default="{ row }">
-              <el-tag v-for="permission in permissionDisplayNames(row.permissions)" :key="permission" type="info" class="permission-tag">{{ permission }}</el-tag>
-              <span v-if="row.permissions.length === 0">暂无</span>
+              <el-tag v-if="permissionModuleCount(row.permissions) > 0" type="info">{{ permissionModuleCount(row.permissions) }} 个模块</el-tag>
+              <span v-else>暂无授权</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="100" fixed="right">
+          <el-table-column label="操作" width="180" fixed="right">
             <template #default="{ row }">
-              <el-button link type="primary" @click="openRoleEdit(row)">编辑权限</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-tab-pane>
-
-      <!-- 菜单权限：系统管理属于固定的高风险菜单，授权规则由后端强制校验。 -->
-      <el-tab-pane label="菜单权限" name="menus">
-        <el-alert
-          title="由超级管理员（R00）和质量经理（R06）为各角色配置可见菜单；系统管理菜单固定仅授予 R00、R06，且拥有全部系统管理权限。"
-          type="info"
-          :closable="false"
-          show-icon
-          class="menu-permission-tip"
-        />
-        <el-table :data="roles" v-loading="rolesLoading" class="data-table">
-          <el-table-column prop="roleCode" label="角色编码" width="110" />
-          <el-table-column prop="roleName" label="角色名称" min-width="140" />
-          <el-table-column label="可见菜单" min-width="360">
-            <template #default="{ row }">
-              <el-tag v-for="module in visibleMenuNames(row.permissions)" :key="module" class="role-tag">{{ module }}</el-tag>
-              <span v-if="visibleMenuNames(row.permissions).length === 0">暂无</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="120" fixed="right">
-            <template #default="{ row }">
-              <el-button link type="primary" @click="openMenuEdit(row)">配置菜单</el-button>
+              <el-button link type="primary" @click="openPermissionDetail(row)">权限详情</el-button>
+              <el-button v-if="!isSuperAdminRole(row)" link type="primary" @click="openRoleEdit(row)">编辑权限</el-button>
+              <el-tag v-else type="warning" size="small">权限锁定</el-tag>
             </template>
           </el-table-column>
         </el-table>
@@ -96,7 +72,9 @@
       <el-tab-pane label="审计日志" name="audit">
         <el-table :data="audits" v-loading="auditLoading" class="data-table">
           <el-table-column prop="id" label="ID" width="70" />
-          <el-table-column prop="operationType" label="操作类型" min-width="120" />
+          <el-table-column label="操作类型" min-width="120">
+            <template #default="{ row }">{{ auditOperationName(row.operationType) }}</template>
+          </el-table-column>
           <el-table-column prop="operatorName" label="操作人" min-width="100" />
           <el-table-column prop="ipAddress" label="IP 地址" min-width="130" />
           <el-table-column prop="operationTime" label="操作时间" min-width="170" show-overflow-tooltip />
@@ -105,19 +83,6 @@
         </el-table>
       </el-tab-pane>
     </el-tabs>
-
-    <el-dialog v-model="menuDialogVisible" :title="`配置菜单 - ${editingMenuRole?.roleName || ''}`" width="620" @closed="resetMenuForm">
-      <el-checkbox-group v-model="menuForm.modules" class="menu-checkboxes">
-        <el-checkbox v-for="menu in menuOptions" :key="menu.code" :label="menu.code" :disabled="menu.code === 'systemAdmin' && !systemAdminRoles.includes(editingMenuRole?.roleCode || '')">
-          {{ menu.name }}
-        </el-checkbox>
-      </el-checkbox-group>
-      <p class="menu-form-note">取消某个菜单会同时取消该角色在该菜单内的操作权限；保存后该角色需要重新登录才能加载新菜单。</p>
-      <template #footer>
-        <el-button @click="menuDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="menuSaving" @click="saveMenuPermissions">保存</el-button>
-      </template>
-    </el-dialog>
 
     <!-- 账号新建/编辑 -->
     <el-dialog v-model="userDialogVisible" :title="editingUser ? '编辑账号' : '新建账号'" width="520" @closed="resetUserForm">
@@ -150,7 +115,7 @@
     </el-dialog>
 
     <!-- 角色权限编辑 -->
-    <el-dialog v-model="roleDialogVisible" :title="`编辑权限 - ${editingRole?.roleName || ''}`" width="520" @closed="resetRoleForm">
+    <el-dialog v-model="roleDialogVisible" :title="`编辑权限 - ${editingRole?.roleName || ''}`" width="760" @closed="resetRoleForm">
       <el-form label-width="90px">
         <el-form-item label="数据范围">
           <el-radio-group v-model="roleForm.dataScope">
@@ -158,10 +123,35 @@
             <el-radio label="ALL_PLANTS">全部分公司</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="操作权限">
-          <el-checkbox-group v-model="roleForm.permissions">
-            <el-checkbox v-for="p in permissionOptions" :key="p.code" :label="p.code">{{ p.name }}</el-checkbox>
-          </el-checkbox-group>
+        <el-form-item label="模块权限">
+          <div class="permission-module-editor">
+            <div v-for="module in permissionModuleOptions" :key="module.code" class="permission-module-card">
+              <el-checkbox
+                :model-value="isModuleSelected(module.code)"
+                :disabled="isSystemAdminModuleLocked(module.code)"
+                @change="toggleModuleSelection(module.code, $event)"
+              >
+                {{ module.name }}
+              </el-checkbox>
+              <el-checkbox-group
+                :model-value="moduleActionSelections[module.code] || []"
+                class="permission-module-actions"
+                @change="updateModuleActions(module.code, $event)"
+              >
+                <el-checkbox
+                  v-for="action in actionOptions"
+                  :key="action.code"
+                  :label="action.code"
+                  :disabled="!isModuleSelected(module.code) || isSystemAdminModuleLocked(module.code) || action.code === 'VIEW'"
+                >
+                  {{ action.name }}
+                </el-checkbox>
+              </el-checkbox-group>
+            </div>
+          </div>
+        </el-form-item>
+        <el-form-item label="编辑原因" required>
+          <el-input v-model="roleForm.reason" type="textarea" :rows="3" maxlength="200" show-word-limit placeholder="请填写本次权限调整原因" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -169,6 +159,22 @@
         <el-button type="primary" :loading="roleSaving" @click="saveRole">保存</el-button>
       </template>
     </el-dialog>
+
+    <el-drawer v-model="permissionDetailVisible" :title="`权限详情 - ${detailRole?.roleName || ''}`" size="460px">
+      <template v-if="detailRole">
+        <el-descriptions :column="1" border class="permission-detail-meta">
+          <el-descriptions-item label="角色编码">{{ detailRole.roleCode }}</el-descriptions-item>
+          <el-descriptions-item label="数据范围">
+            {{ detailRole.dataScopeName || (detailRole.dataScope === 'ALL_PLANTS' ? '全部分公司' : '本分公司') }}
+          </el-descriptions-item>
+        </el-descriptions>
+        <el-empty v-if="permissionDetailModules.length === 0" description="暂无授权" />
+        <div v-for="module in permissionDetailModules" :key="module.code" class="permission-detail-module">
+          <div class="permission-detail-module-name">{{ module.name }}</div>
+          <el-tag v-for="action in module.actions" :key="action" type="info" class="permission-detail-action">{{ action }}</el-tag>
+        </div>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
@@ -177,6 +183,8 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import { auditOperationName } from '@/utils/audit-operation'
+import { permissionDetailsByModule, permissionsFromModuleActions, validatePermissionEdit } from '@/utils/permission-tree'
 import {
   getAdminUsers,
   createAdminUser,
@@ -209,8 +217,8 @@ const actionOptions = [
   { code: 'APPROVE', name: '审核' },
   { code: 'EXPORT', name: '导出' },
 ]
-const systemAdminRoles = ['R00', 'R06']
-const menuOptions = [
+const systemAdminRoles = new Set(['R00', 'R06'])
+const permissionModuleOptions = [
   { code: 'systemAdmin', name: '系统管理' },
   { code: 'trace', name: '来料追溯' },
   { code: 'incoming', name: '来料数据管理' },
@@ -220,19 +228,10 @@ const menuOptions = [
   { code: 'spc', name: 'SPC 过程能力分析' },
   { code: 'productionDefect', name: '不良信息管理' },
   { code: 'processTools', name: '过程工具' },
-]
-const permissionModuleOptions = [
-  ...menuOptions,
   { code: 'supplier', name: '供应商管理' },
   { code: 'material', name: '物料变更' },
   { code: 'notification', name: '系统通知' },
 ]
-const permissionOptions = permissionModuleOptions.flatMap((module) =>
-  actionOptions.map((action) => ({
-    code: `${module.code}:${action.code}`,
-    name: `${module.name} · ${action.name}`,
-  })),
-)
 function roleName(code: string) {
   return roleOptions.find((r) => r.code === code)?.name || code
 }
@@ -346,65 +345,81 @@ const rolesLoading = ref(false)
 const roleDialogVisible = ref(false)
 const roleSaving = ref(false)
 const editingRole = ref<RolePermission | null>(null)
-const roleForm = reactive<{ dataScope: string; permissions: string[] }>({ dataScope: 'OWN_PLANT', permissions: [] })
-const menuDialogVisible = ref(false)
-const menuSaving = ref(false)
-const editingMenuRole = ref<RolePermission | null>(null)
-const menuForm = reactive<{ modules: string[] }>({ modules: [] })
-function visibleMenuNames(permissions: string[]) {
-  const enabled = new Set(permissions.map((permission) => permission.split(':', 1)[0]))
-  return menuOptions.filter((menu) => enabled.has(menu.code)).map((menu) => menu.name)
+const roleForm = reactive<{ dataScope: string; permissions: string[]; reason: string }>({ dataScope: 'OWN_PLANT', permissions: [], reason: '' })
+const selectedModuleCodes = ref<string[]>([])
+const moduleActionSelections = reactive<Record<string, string[]>>({})
+const permissionDetailVisible = ref(false)
+const detailRole = ref<RolePermission | null>(null)
+
+const permissionDetailModules = computed(() =>
+  detailRole.value ? permissionDetailsByModule(detailRole.value.permissions, permissionModuleOptions) : [],
+)
+function permissionModuleCount(permissions: string[]) {
+  return permissionDetailsByModule(permissions, permissionModuleOptions).length
 }
-function permissionDisplayNames(permissions: string[]) {
-  return permissions.map((permission) => {
-    const [moduleCode, actionCode] = permission.split(':', 2)
-    const moduleName = permissionModuleOptions.find((module) => module.code === moduleCode)?.name || moduleCode
-    const actionName = actionOptions.find((action) => action.code === actionCode)?.name || actionCode
-    return `${moduleName} · ${actionName}`
-  })
+function isSuperAdminRole(role: RolePermission) {
+  return role.roleCode === 'R00'
 }
-function resetMenuForm() {
-  editingMenuRole.value = null
-  menuForm.modules = []
+function openPermissionDetail(role: RolePermission) {
+  detailRole.value = role
+  permissionDetailVisible.value = true
 }
-function openMenuEdit(role: RolePermission) {
-  editingMenuRole.value = role
-  menuForm.modules = menuOptions.filter((menu) => role.permissions.some((permission) => permission.startsWith(`${menu.code}:`))).map((menu) => menu.code)
-  menuDialogVisible.value = true
+
+function isModuleSelected(moduleCode: string) {
+  return selectedModuleCodes.value.includes(moduleCode)
 }
-async function saveMenuPermissions() {
-  if (!editingMenuRole.value) return
-  menuSaving.value = true
-  try {
-    const selected = new Set(menuForm.modules)
-    const menuCodes = new Set(menuOptions.map((menu) => menu.code))
-    const permissions = editingMenuRole.value.permissions.filter((permission) => !menuCodes.has(permission.split(':', 1)[0]) || selected.has(permission.split(':', 1)[0]))
-    for (const module of selected) {
-      if (!permissions.some((permission) => permission.startsWith(`${module}:`))) permissions.push(`${module}:VIEW`)
-    }
-    await updateRolePermissions(editingMenuRole.value.roleCode, {
-      dataScope: editingMenuRole.value.dataScope,
-      permissions,
-      reason: '调整角色菜单权限',
-      version: editingMenuRole.value.version,
-    })
-    if (await endSessionAfterOwnRoleUpdate(editingMenuRole.value.roleCode)) return
-    ElMessage.success('菜单权限已更新，角色重新登录后生效')
-    menuDialogVisible.value = false
-    await loadRoles()
-  } finally {
-    menuSaving.value = false
+function isSystemAdminModuleLocked(moduleCode: string) {
+  return moduleCode === 'systemAdmin' && !systemAdminRoles.has(editingRole.value?.roleCode || '')
+}
+function syncModulePermissions() {
+  roleForm.permissions = permissionsFromModuleActions(
+    selectedModuleCodes.value,
+    moduleActionSelections,
+    permissionModuleOptions,
+    roleForm.permissions,
+  )
+}
+function toggleModuleSelection(moduleCode: string, enabled: unknown) {
+  if (isSystemAdminModuleLocked(moduleCode)) return
+  const selected = Boolean(enabled)
+  if (selected && !isModuleSelected(moduleCode)) {
+    selectedModuleCodes.value.push(moduleCode)
+    moduleActionSelections[moduleCode] = Array.from(new Set(['VIEW', ...(moduleActionSelections[moduleCode] || [])]))
   }
+  if (!selected) {
+    selectedModuleCodes.value = selectedModuleCodes.value.filter((code) => code !== moduleCode)
+    moduleActionSelections[moduleCode] = []
+  }
+  syncModulePermissions()
 }
+function updateModuleActions(moduleCode: string, actions: unknown) {
+  if (!isModuleSelected(moduleCode) || !Array.isArray(actions)) return
+  moduleActionSelections[moduleCode] = Array.from(new Set(['VIEW', ...actions.filter((action): action is string => typeof action === 'string')]))
+  syncModulePermissions()
+}
+
 function resetRoleForm() {
   roleForm.dataScope = 'OWN_PLANT'
   roleForm.permissions = []
+  roleForm.reason = ''
+  selectedModuleCodes.value = []
+  for (const moduleCode of Object.keys(moduleActionSelections)) delete moduleActionSelections[moduleCode]
   editingRole.value = null
 }
 function openRoleEdit(row: RolePermission) {
   editingRole.value = row
   roleForm.dataScope = row.dataScope || 'OWN_PLANT'
   roleForm.permissions = [...(row.permissions || [])]
+  roleForm.reason = ''
+  selectedModuleCodes.value = permissionDetailsByModule(row.permissions || [], permissionModuleOptions).map((module) => module.code)
+  for (const module of permissionModuleOptions) {
+    const grantedActions = (row.permissions || [])
+      .filter((permission) => permission.startsWith(`${module.code}:`))
+      .map((permission) => permission.split(':', 2)[1])
+    moduleActionSelections[module.code] = isModuleSelected(module.code)
+      ? Array.from(new Set(['VIEW', ...grantedActions]))
+      : []
+  }
   roleDialogVisible.value = true
 }
 async function endSessionAfterOwnRoleUpdate(roleCode: string) {
@@ -416,12 +431,17 @@ async function endSessionAfterOwnRoleUpdate(roleCode: string) {
 }
 async function saveRole() {
   if (!editingRole.value) return
+  const validationMessage = validatePermissionEdit(selectedModuleCodes.value, roleForm.reason)
+  if (validationMessage) {
+    ElMessage.warning(validationMessage)
+    return
+  }
   roleSaving.value = true
   try {
     await updateRolePermissions(editingRole.value.roleCode, {
       dataScope: roleForm.dataScope,
       permissions: roleForm.permissions,
-      reason: '系统管理后台调整',
+      reason: roleForm.reason.trim(),
       version: editingRole.value.version,
     })
     if (await endSessionAfterOwnRoleUpdate(editingRole.value.roleCode)) return
@@ -492,21 +512,35 @@ onMounted(() => {
 .data-table {
   width: 100%;
 }
-.menu-permission-tip {
-  margin-bottom: 14px;
+.permission-module-editor {
+  width: 100%;
 }
-.role-tag,
-.permission-tag {
+.permission-module-card {
+  padding: 12px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid #ebeef5;
+  background: #fafafa;
+  border-radius: 4px;
+}
+.permission-module-actions {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 10px 0 0 24px;
+}
+.permission-detail-meta {
+  margin-bottom: 16px;
+}
+.permission-detail-module {
+  padding: 14px 0;
+  border-bottom: 1px solid #ebeef5;
+}
+.permission-detail-module-name {
+  margin-bottom: 10px;
+  color: #303133;
+  font-weight: 600;
+}
+.permission-detail-action {
   margin-right: 8px;
-}
-.menu-checkboxes {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-.menu-form-note {
-  margin: 18px 0 0;
-  color: #909399;
-  font-size: 13px;
 }
 </style>
