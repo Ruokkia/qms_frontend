@@ -29,3 +29,7 @@ export function logoutApi(refreshToken?: string): Promise<ApiResult<null>> {
 export function getUserInfoApi(): Promise<ApiResult<UserInfo>> {
   return apiGet<UserInfo>('/auth/me')
 }
+
+export function changePasswordApi(currentPassword: string, newPassword: string, confirmPassword: string): Promise<ApiResult<null>> {
+  return apiPost<null>('/auth/change-password', { currentPassword, newPassword, confirmPassword })
+}

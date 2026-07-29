@@ -62,9 +62,19 @@
             <el-option label="深圳" value="SZ" />
             <el-option label="梅州" value="MZ" />
           </el-select>
+          <el-button size="small" @click="passwordDialogVisible = true">修改密码</el-button>
           <el-button size="small" @click="onLogout">退出登录</el-button>
         </div>
       </header>
+
+      <el-dialog v-model="passwordDialogVisible" title="修改密码" width="420px" :close-on-click-modal="false">
+        <el-form label-width="88px">
+          <el-form-item label="当前密码"><el-input v-model="passwordForm.currentPassword" type="password" show-password /></el-form-item>
+          <el-form-item label="新密码"><el-input v-model="passwordForm.newPassword" type="password" show-password placeholder="至少 6 位" /></el-form-item>
+          <el-form-item label="确认新密码"><el-input v-model="passwordForm.confirmPassword" type="password" show-password /></el-form-item>
+        </el-form>
+        <template #footer><el-button @click="passwordDialogVisible = false">取消</el-button><el-button type="primary" :loading="changingPassword" @click="onChangePassword">保存</el-button></template>
+      </el-dialog>
 
       <!-- 内容区 -->
       <main class="layout-content">
@@ -77,7 +87,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Fold, Expand } from '@element-plus/icons-vue'
@@ -85,6 +95,7 @@ import { useAuthStore } from '@/stores/auth'
 import { NAV_GROUPS } from '@/config/nav'
 import NotificationCenter from '@/components/NotificationCenter.vue'
 import type { PlantCode } from '@/types'
+import { changePasswordApi } from '@/api/auth'
 
 const router = useRouter()
 const route = useRoute()
@@ -92,6 +103,9 @@ const auth = useAuthStore()
 
 const isCollapsed = ref(false)
 const currentArea = ref<PlantCode>(auth.plantCode)
+const passwordDialogVisible = ref(false)
+const changingPassword = ref(false)
+const passwordForm = reactive({ currentPassword: '', newPassword: '', confirmPassword: '' })
 
 const visibleNavGroups = computed(() => {
   return NAV_GROUPS.map((g) => ({
@@ -113,9 +127,23 @@ function onAreaChange(val: PlantCode) {
 }
 
 async function onLogout() {
-  auth.logout()
+  await auth.logout()
   ElMessage.success('已退出登录')
-  router.push('/login')
+  await router.push('/login')
+}
+
+async function onChangePassword() {
+  if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) return ElMessage.warning('请填写全部密码字段')
+  if (passwordForm.newPassword.length < 6) return ElMessage.warning('新密码至少 6 位')
+  if (passwordForm.newPassword !== passwordForm.confirmPassword) return ElMessage.warning('两次输入的新密码不一致')
+  if (passwordForm.currentPassword === passwordForm.newPassword) return ElMessage.warning('新密码不能与当前密码相同')
+  changingPassword.value = true
+  try {
+    await changePasswordApi(passwordForm.currentPassword, passwordForm.newPassword, passwordForm.confirmPassword)
+    auth.clearSession(); passwordDialogVisible.value = false
+    Object.assign(passwordForm, { currentPassword: '', newPassword: '', confirmPassword: '' })
+    ElMessage.success('密码已修改，请重新登录'); await router.push('/login')
+  } finally { changingPassword.value = false }
 }
 </script>
 
