@@ -364,6 +364,8 @@ async function promptRequiredReason(title: string, message: string): Promise<str
   try {
     const { value } = await ElMessageBox.prompt(message, title, {
       inputType: 'textarea',
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
       inputValidator: (reason) => hasRequiredReason(reason) || '请填写操作原因',
     })
     return value.trim()
@@ -406,6 +408,8 @@ async function resetPassword(row: AdminUser) {
   try {
     const result = await ElMessageBox.prompt('请输入至少 6 位的新密码', '重置密码', {
       inputType: 'password',
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
       inputValidator: (value) => typeof value === 'string' && value.trim().length >= 6 || '新密码至少 6 位',
     })
     password = result.value.trim()
