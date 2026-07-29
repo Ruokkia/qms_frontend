@@ -124,7 +124,6 @@ export interface NavItem {
   title: string
   icon: string
   path: string
-  roles: string[]  // 可访问的角色ID列表
 }
 
 export interface AdminUser { id: number; account: string; realName: string; roleCode: string; plantCode: PlantCode; plantName: string; status: number; authVersion: number; lastLoginAt?: string }

@@ -94,6 +94,7 @@ import { Search } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { NAV_GROUPS } from '@/config/nav'
 import type { ModuleKey } from '@/types'
+import { filterNavigationByModules } from '@/utils/dashboard-navigation'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -123,16 +124,7 @@ const QUICK_ACTIONS: { key: ModuleKey; title: string; icon: string; path: string
 
 const quickActions = computed(() => QUICK_ACTIONS.filter((action) => auth.hasModule(action.key)))
 
-const visibleGroups = computed(() =>
-  NAV_GROUPS.filter((group) => group.label !== '工作台')
-    .map((group) => ({
-      label: group.label,
-      items: group.items.filter(
-        (item) => item.key !== 'dashboard' && item.roles.includes(auth.roleId),
-      ),
-    }))
-    .filter((group) => group.items.length > 0),
-)
+const visibleGroups = computed(() => filterNavigationByModules(NAV_GROUPS, auth.allowedModules))
 
 const roleEmpty = computed(() => visibleGroups.value.length === 0)
 const keyword = ref('')
