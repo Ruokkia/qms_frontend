@@ -15,6 +15,8 @@ const operationNames: Record<string, string> = {
   UNLOCK_USER: '解锁账号',
   RESET_PASSWORD: '重置密码',
   UPDATE_ROLE_PERMISSION: '调整角色权限',
+  CREATE_ROLE: '创建角色',
+  DELETE_ROLE: '删除角色',
 }
 
 export function auditOperationName(operationType: string): string {

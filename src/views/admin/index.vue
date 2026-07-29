@@ -13,7 +13,11 @@
         <div class="toolbar">
           <el-input v-model="userKeyword" clearable placeholder="账号 / 姓名" class="kw" @input="filterUsers" />
           <el-select v-model="userRoleFilter" clearable placeholder="全部角色" class="role-filter" @change="filterUsers">
-            <el-option v-for="r in roleOptions" :key="r.code" :label="r.name" :value="r.code" />
+            <el-option v-for="r in roleChoices" :key="r.code" :label="r.name" :value="r.code" />
+          </el-select>
+          <el-select v-model="userStatusFilter" clearable placeholder="全部状态" class="status-filter">
+            <el-option label="使用中" :value="1" />
+            <el-option label="已停用" :value="0" />
           </el-select>
           <el-button type="primary" @click="openCreate">新建账号</el-button>
         </div>
@@ -28,7 +32,7 @@
           <el-table-column prop="plantName" label="分公司" min-width="100" />
           <el-table-column label="状态" width="90" align="center">
             <template #default="{ row }">
-              <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small">{{ row.status === 1 ? '启用' : '停用' }}</el-tag>
+              <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small">{{ row.status === 1 ? '使用中' : '已停用' }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column prop="lastLoginAt" label="最近登录" min-width="160" show-overflow-tooltip />
@@ -46,6 +50,9 @@
 
       <!-- 角色权限 -->
       <el-tab-pane label="角色权限" name="roles">
+        <div class="toolbar role-toolbar">
+          <el-button type="primary" @click="openRoleCreate">添加角色</el-button>
+        </div>
         <el-table :data="roles" v-loading="rolesLoading" class="data-table">
           <el-table-column prop="roleCode" label="角色编码" width="110" />
           <el-table-column prop="roleName" label="角色名称" min-width="120" />
@@ -58,11 +65,16 @@
               <span v-else>暂无授权</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="180" fixed="right">
+          <el-table-column label="操作" width="230" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openPermissionDetail(row)">权限详情</el-button>
               <el-button v-if="!isSuperAdminRole(row)" link type="primary" @click="openRoleEdit(row)">编辑权限</el-button>
               <el-tag v-else type="warning" size="small">权限锁定</el-tag>
+              <el-tooltip :content="isBuiltInRole(row.roleCode) ? 'R00 超级管理员角色不能删除' : '删除角色'" placement="top">
+                <span>
+                  <el-button link type="danger" :disabled="isBuiltInRole(row.roleCode)" @click="removeRole(row)">删除角色</el-button>
+                </span>
+              </el-tooltip>
             </template>
           </el-table-column>
         </el-table>
@@ -95,7 +107,7 @@
         </el-form-item>
         <el-form-item label="角色">
           <el-select v-model="userForm.roleCode" placeholder="选择角色" style="width: 100%">
-            <el-option v-for="r in roleOptions" :key="r.code" :label="r.name" :value="r.code" />
+            <el-option v-for="r in roleChoices" :key="r.code" :label="r.name" :value="r.code" />
           </el-select>
         </el-form-item>
         <el-form-item label="分公司">
@@ -115,8 +127,14 @@
     </el-dialog>
 
     <!-- 角色权限编辑 -->
-    <el-dialog v-model="roleDialogVisible" :title="`编辑权限 - ${editingRole?.roleName || ''}`" width="760" @closed="resetRoleForm">
+    <el-dialog v-model="roleDialogVisible" :title="roleDialogMode === 'create' ? '添加角色' : `编辑权限 - ${editingRole?.roleName || ''}`" width="760" @closed="resetRoleForm">
       <el-form label-width="90px">
+        <el-form-item v-if="roleDialogMode === 'create'" label="角色名称" required>
+          <el-input v-model="roleForm.roleName" maxlength="50" placeholder="请输入角色名称" />
+        </el-form-item>
+        <el-form-item v-if="roleDialogMode === 'create'" label="角色说明">
+          <el-input v-model="roleForm.description" maxlength="200" placeholder="可填写该角色的职责说明" />
+        </el-form-item>
         <el-form-item label="数据范围">
           <el-radio-group v-model="roleForm.dataScope">
             <el-radio label="OWN_PLANT">本分公司</el-radio>
@@ -150,8 +168,8 @@
             </div>
           </div>
         </el-form-item>
-        <el-form-item label="编辑原因" required>
-          <el-input v-model="roleForm.reason" type="textarea" :rows="3" maxlength="200" show-word-limit placeholder="请填写本次权限调整原因" />
+        <el-form-item :label="roleDialogMode === 'create' ? '创建原因' : '编辑原因'" required>
+          <el-input v-model="roleForm.reason" type="textarea" :rows="3" maxlength="200" show-word-limit :placeholder="roleDialogMode === 'create' ? '请填写创建角色的原因' : '请填写本次权限调整原因'" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -184,6 +202,8 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { auditOperationName } from '@/utils/audit-operation'
+import { isDialogCancellation } from '@/utils/dialog-action'
+import { isBuiltInRole } from '@/utils/role-policy'
 import { permissionDetailsByModule, permissionsFromModuleActions, validatePermissionEdit } from '@/utils/permission-tree'
 import {
   getAdminUsers,
@@ -193,7 +213,9 @@ import {
   unlockAdminUser,
   resetAdminUserPassword,
   getRoles,
+  createRole as createAdminRole,
   updateRolePermissions,
+  deleteRole as deleteAdminRole,
   getAdminAudit,
 } from '@/api/admin'
 import type { AdminUser, RolePermission, AdminAudit } from '@/types'
@@ -233,7 +255,7 @@ const permissionModuleOptions = [
   { code: 'notification', name: '系统通知' },
 ]
 function roleName(code: string) {
-  return roleOptions.find((r) => r.code === code)?.name || code
+  return roleChoices.value.find((r) => r.code === code)?.name || code
 }
 
 // ── 账号管理 ──
@@ -241,11 +263,13 @@ const users = ref<AdminUser[]>([])
 const usersLoading = ref(false)
 const userKeyword = ref('')
 const userRoleFilter = ref('')
+const userStatusFilter = ref<number | ''>('')
 const visibleUsers = computed(() =>
   users.value.filter((u) => {
     const kw = userKeyword.value.trim().toLowerCase()
     if (kw && !`${u.account} ${u.realName}`.toLowerCase().includes(kw)) return false
     if (userRoleFilter.value && u.roleCode !== userRoleFilter.value) return false
+    if (userStatusFilter.value !== '' && u.status !== userStatusFilter.value) return false
     return true
   }),
 )
@@ -341,11 +365,22 @@ async function loadUsers() {
 
 // ── 角色权限 ──
 const roles = ref<RolePermission[]>([])
+const roleChoices = computed(() => {
+  if (roles.value.length === 0) return roleOptions
+  return roles.value.map((role) => ({ code: role.roleCode, name: role.roleName }))
+})
 const rolesLoading = ref(false)
 const roleDialogVisible = ref(false)
+const roleDialogMode = ref<'create' | 'edit'>('edit')
 const roleSaving = ref(false)
 const editingRole = ref<RolePermission | null>(null)
-const roleForm = reactive<{ dataScope: string; permissions: string[]; reason: string }>({ dataScope: 'OWN_PLANT', permissions: [], reason: '' })
+const roleForm = reactive<{ roleName: string; description: string; dataScope: string; permissions: string[]; reason: string }>({
+  roleName: '',
+  description: '',
+  dataScope: 'OWN_PLANT',
+  permissions: [],
+  reason: '',
+})
 const selectedModuleCodes = ref<string[]>([])
 const moduleActionSelections = reactive<Record<string, string[]>>({})
 const permissionDetailVisible = ref(false)
@@ -399,14 +434,23 @@ function updateModuleActions(moduleCode: string, actions: unknown) {
 }
 
 function resetRoleForm() {
+  roleForm.roleName = ''
+  roleForm.description = ''
   roleForm.dataScope = 'OWN_PLANT'
   roleForm.permissions = []
   roleForm.reason = ''
   selectedModuleCodes.value = []
   for (const moduleCode of Object.keys(moduleActionSelections)) delete moduleActionSelections[moduleCode]
   editingRole.value = null
+  roleDialogMode.value = 'edit'
+}
+function openRoleCreate() {
+  resetRoleForm()
+  roleDialogMode.value = 'create'
+  roleDialogVisible.value = true
 }
 function openRoleEdit(row: RolePermission) {
+  roleDialogMode.value = 'edit'
   editingRole.value = row
   roleForm.dataScope = row.dataScope || 'OWN_PLANT'
   roleForm.permissions = [...(row.permissions || [])]
@@ -430,7 +474,11 @@ async function endSessionAfterOwnRoleUpdate(roleCode: string) {
   return true
 }
 async function saveRole() {
-  if (!editingRole.value) return
+  if (roleDialogMode.value === 'create' && !roleForm.roleName.trim()) {
+    ElMessage.warning('请填写角色名称')
+    return
+  }
+  if (roleDialogMode.value === 'edit' && !editingRole.value) return
   const validationMessage = validatePermissionEdit(selectedModuleCodes.value, roleForm.reason)
   if (validationMessage) {
     ElMessage.warning(validationMessage)
@@ -438,6 +486,20 @@ async function saveRole() {
   }
   roleSaving.value = true
   try {
+    if (roleDialogMode.value === 'create') {
+      await createAdminRole({
+        roleName: roleForm.roleName.trim(),
+        description: roleForm.description.trim(),
+        dataScope: roleForm.dataScope,
+        permissions: roleForm.permissions,
+        reason: roleForm.reason.trim(),
+      })
+      ElMessage.success('角色已创建')
+      roleDialogVisible.value = false
+      await loadRoles()
+      return
+    }
+    if (!editingRole.value) return
     await updateRolePermissions(editingRole.value.roleCode, {
       dataScope: roleForm.dataScope,
       permissions: roleForm.permissions,
@@ -451,6 +513,29 @@ async function saveRole() {
   } finally {
     roleSaving.value = false
   }
+}
+async function removeRole(role: RolePermission) {
+  let reason = ''
+  try {
+    const result = await ElMessageBox.prompt(
+      `删除角色“${role.roleName}”后，已停用账号仍会保留，但重新启用前必须改为现有角色。`,
+      '删除角色',
+      {
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+        inputType: 'textarea',
+        inputPlaceholder: '请填写删除原因',
+        inputValidator: (value) => Boolean(value?.trim()) || '必须填写删除原因',
+      },
+    )
+    reason = result.value
+  } catch (error) {
+    if (isDialogCancellation(error)) return
+    throw error
+  }
+  await deleteAdminRole(role.roleCode, reason.trim())
+  ElMessage.success('角色已删除')
+  await Promise.all([loadRoles(), loadUsers(), loadAudit()])
 }
 async function loadRoles() {
   rolesLoading.value = true
@@ -508,6 +593,12 @@ onMounted(() => {
 }
 .toolbar .role-filter {
   width: 160px;
+}
+.toolbar .status-filter {
+  width: 130px;
+}
+.role-toolbar {
+  justify-content: flex-end;
 }
 .data-table {
   width: 100%;
