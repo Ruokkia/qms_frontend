@@ -117,7 +117,7 @@
           </el-select>
         </el-form-item>
         <el-form-item v-if="!editingUser" label="初始密码">
-          <el-input v-model="userForm.password" placeholder="不填则使用默认密码" show-password />
+          <el-input v-model="userForm.password" placeholder="不填则使用默认密码 123456" show-password />
         </el-form-item>
       </el-form>
       <template #footer>
