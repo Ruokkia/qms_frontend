@@ -126,6 +126,29 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="roleReplacementVisible" title="更换角色并启用账号" width="520" @closed="resetRoleReplacement">
+      <template v-if="roleReplacementUser">
+        <el-alert type="warning" :closable="false" show-icon title="该账号原角色已删除，需选择现有角色后才能启用。" class="role-replacement-alert" />
+        <el-form label-width="90px">
+          <el-form-item label="账号">
+            <span>{{ roleReplacementUser.account }}（{{ roleReplacementUser.realName }}）</span>
+          </el-form-item>
+          <el-form-item label="新角色" required>
+            <el-select v-model="roleReplacementForm.roleCode" placeholder="请选择现有角色" style="width: 100%">
+              <el-option v-for="role in roleChoices" :key="role.code" :label="role.name" :value="role.code" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="操作原因" required>
+            <el-input v-model="roleReplacementForm.reason" type="textarea" :rows="3" maxlength="200" show-word-limit placeholder="请填写更换角色并启用账号的原因" />
+          </el-form-item>
+        </el-form>
+      </template>
+      <template #footer>
+        <el-button @click="roleReplacementVisible = false">取消</el-button>
+        <el-button type="primary" :loading="roleReplacementSaving" @click="replaceRoleAndEnable">确认并启用</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 角色权限编辑 -->
     <el-dialog v-model="roleDialogVisible" :title="roleDialogMode === 'create' ? '添加角色' : `编辑权限 - ${editingRole?.roleName || ''}`" width="760" @closed="resetRoleForm">
       <el-form label-width="90px">
@@ -202,8 +225,8 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { auditOperationName } from '@/utils/audit-operation'
-import { isDialogCancellation } from '@/utils/dialog-action'
-import { isBuiltInRole } from '@/utils/role-policy'
+import { hasRequiredReason, isDialogCancellation } from '@/utils/dialog-action'
+import { isBuiltInRole, isMissingRoleError } from '@/utils/role-policy'
 import { permissionDetailsByModule, permissionsFromModuleActions, validatePermissionEdit } from '@/utils/permission-tree'
 import {
   getAdminUsers,
@@ -287,9 +310,18 @@ const userForm = reactive<Record<string, unknown>>({
   plantCode: '',
   password: '',
 })
+const roleReplacementVisible = ref(false)
+const roleReplacementSaving = ref(false)
+const roleReplacementUser = ref<AdminUser | null>(null)
+const roleReplacementForm = reactive({ roleCode: '', reason: '' })
 function resetUserForm() {
   Object.assign(userForm, { account: '', realName: '', roleCode: '', plantCode: '', password: '' })
   editingUser.value = null
+}
+function resetRoleReplacement() {
+  roleReplacementUser.value = null
+  roleReplacementForm.roleCode = ''
+  roleReplacementForm.reason = ''
 }
 function openCreate() {
   resetUserForm()
@@ -328,30 +360,94 @@ async function saveUser() {
     userSaving.value = false
   }
 }
+async function promptRequiredReason(title: string, message: string): Promise<string | null> {
+  try {
+    const { value } = await ElMessageBox.prompt(message, title, {
+      inputType: 'textarea',
+      inputValidator: (reason) => hasRequiredReason(reason) || '请填写操作原因',
+    })
+    return value.trim()
+  } catch (error) {
+    if (isDialogCancellation(error)) return null
+    throw error
+  }
+}
 async function enableUser(row: AdminUser) {
-  const { value: reason } = await ElMessageBox.prompt('启用原因', '启用账号', { inputType: 'textarea' })
-  await changeAdminUserStatus(row.id, true, reason || '')
-  ElMessage.success('已启用')
-  await loadUsers()
+  const reason = await promptRequiredReason('启用账号', '启用原因')
+  if (!reason) return
+  try {
+    await changeAdminUserStatus(row.id, true, reason)
+    ElMessage.success('已启用')
+    await loadUsers()
+  } catch (error) {
+    if (!isMissingRoleError(error)) throw error
+    roleReplacementUser.value = row
+    roleReplacementForm.roleCode = ''
+    roleReplacementForm.reason = reason
+    roleReplacementVisible.value = true
+  }
 }
 async function disableUser(row: AdminUser) {
-  const { value: reason } = await ElMessageBox.prompt('停用原因', '停用账号', { inputType: 'textarea' })
-  await changeAdminUserStatus(row.id, false, reason || '')
+  const reason = await promptRequiredReason('停用账号', '停用原因')
+  if (!reason) return
+  await changeAdminUserStatus(row.id, false, reason)
   ElMessage.success('已停用')
   await loadUsers()
 }
 async function unlockUser(row: AdminUser) {
-  const { value: reason } = await ElMessageBox.prompt('解锁原因', '解锁账号', { inputType: 'textarea' })
-  await unlockAdminUser(row.id, reason || '')
+  const reason = await promptRequiredReason('解锁账号', '解锁原因')
+  if (!reason) return
+  await unlockAdminUser(row.id, reason)
   ElMessage.success('已解锁')
   await loadUsers()
 }
 async function resetPassword(row: AdminUser) {
-  const { value: password } = await ElMessageBox.prompt('请输入新密码', '重置密码', { inputType: 'password' })
-  if (!password) return
-  const { value: reason } = await ElMessageBox.prompt('操作原因', '重置密码', { inputType: 'textarea' })
-  await resetAdminUserPassword(row.id, password, reason || '')
+  let password: string | null = null
+  try {
+    const result = await ElMessageBox.prompt('请输入至少 6 位的新密码', '重置密码', {
+      inputType: 'password',
+      inputValidator: (value) => typeof value === 'string' && value.trim().length >= 6 || '新密码至少 6 位',
+    })
+    password = result.value.trim()
+  } catch (error) {
+    if (isDialogCancellation(error)) return
+    throw error
+  }
+  const reason = await promptRequiredReason('重置密码', '操作原因')
+  if (!reason || !password) return
+  await resetAdminUserPassword(row.id, password, reason)
   ElMessage.success('密码已重置')
+}
+async function replaceRoleAndEnable() {
+  const user = roleReplacementUser.value
+  if (!user) return
+  if (!roleReplacementForm.roleCode) {
+    ElMessage.warning('请选择现有角色')
+    return
+  }
+  if (!hasRequiredReason(roleReplacementForm.reason)) {
+    ElMessage.warning('请填写操作原因')
+    return
+  }
+  roleReplacementSaving.value = true
+  try {
+    const reason = roleReplacementForm.reason.trim()
+    await updateAdminUser(user.id, {
+      account: user.account,
+      realName: user.realName,
+      roleCode: roleReplacementForm.roleCode,
+      plantCode: user.plantCode,
+      plantName: user.plantName,
+      reason,
+    })
+    if (userRoleFilter.value === user.roleCode) userRoleFilter.value = ''
+    await changeAdminUserStatus(user.id, true, reason)
+    ElMessage.success('角色已更换，账号已启用')
+    roleReplacementVisible.value = false
+    await loadUsers()
+  } finally {
+    roleReplacementSaving.value = false
+  }
 }
 async function loadUsers() {
   usersLoading.value = true
