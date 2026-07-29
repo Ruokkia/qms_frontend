@@ -100,7 +100,7 @@ const stats = ref<ExceptionStats | null>(null); const statsLoading = ref(false);
 const pageList = ref<ExceptionOrder[]>([]); const pageTotal = ref(0); const analysisItems = ref<ExceptionAnalysisItem[]>([]); const suppliers = ref<SupplierExceptionSummary[]>([])
 const keyword = ref(''); const activeQuick = ref<'all' | 'overdue' | 'serious' | 'verify'>('all')
 const query = reactive({ page: 1, size: 20, status: '', sourceType: '', processType: '' })
-const sourceOptions = ['来料不良', '制程不良', '审核问题', '客户投诉', '重复问题']
+const sourceOptions = ['来料不良', '首件不良', '制程不良', '审核问题', '客户投诉', '重复问题']
 
 const seriousPendingCount = computed(() => pageList.value.filter(x => x.severity === '严重' && x.status !== '已闭环').length)
 const quickFilters = computed(() => [{ key: 'all' as const, label: '全部', count: stats.value?.totalExceptions ?? 0 }, { key: 'overdue' as const, label: '超期', count: stats.value?.overdueCount ?? 0 }, { key: 'serious' as const, label: '严重', count: seriousPendingCount.value }, { key: 'verify' as const, label: '待验证', count: stats.value?.pendingVerifyCount ?? 0 }])
@@ -121,7 +121,7 @@ function goSupplier(supplierId: number) { router.push({ path: '/exception', quer
 async function loadStats() { statsLoading.value = true; try { const r = await getExceptionStatsApi(); if (r.code === 0) stats.value = r.data } finally { statsLoading.value = false } }
 async function loadList() { listLoading.value = true; try { const r = await getExceptionListApi({ ...query }); if (r.code === 0) { pageList.value = r.data.list; pageTotal.value = r.data.total } } finally { listLoading.value = false } }
 async function loadSideData() { const [analysis, summary] = await Promise.all([getExceptionAnalysisApi('defectDesc'), getSupplierExceptionSummaryApi({ minCount: 1 })]); if (analysis.code === 0) analysisItems.value = analysis.data.items; if (summary.code === 0) suppliers.value = summary.data }
-async function checkEscalation() { checkLoading.value = true; try { const r = await checkEscalationApi(); if (r.code === 0) ElMessage.success(r.data.triggeredSuppliers?.length ? `发现 ${r.data.triggeredSuppliers.length} 个升级关注项` : '未发现新的升级关注项') } finally { checkLoading.value = false } }
+async function checkEscalation() { checkLoading.value = true; try { const r = await checkEscalationApi({ daysWindow: 90, minRepeatCount: 3 }); if (r.code === 0) ElMessage.success(r.data.triggeredSuppliers?.length ? `发现 ${r.data.triggeredSuppliers.length} 个升级关注项` : '未发现新的升级关注项') } finally { checkLoading.value = false } }
 onMounted(async () => { await Promise.all([loadStats(), loadList(), loadSideData()]) })
 </script>
 

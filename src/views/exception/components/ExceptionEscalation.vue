@@ -3,6 +3,11 @@
     <div class="panel-header">
       <span class="panel-title">供应商升级管理</span>
       <div class="panel-actions">
+        <span class="check-config-label">窗口</span>
+        <el-input-number v-model="checkForm.daysWindow" :min="1" :max="365" :controls="false" size="small" class="check-number" />
+        <span class="check-config-label">天 / 阈值</span>
+        <el-input-number v-model="checkForm.minRepeatCount" :min="1" :max="99" :controls="false" size="small" class="check-number" />
+        <span class="check-config-label">次</span>
         <el-button type="warning" size="small" :loading="checkLoading" @click="checkEscalation">
           检查升级
         </el-button>
@@ -59,7 +64,16 @@
     <el-dialog v-model="dialogVisible" title="发起供应商升级" width="520">
       <el-form :model="form" label-width="100px">
         <el-form-item label="供应商ID">
-          <el-input-number v-model="form.supplierId" :min="1" controls-position="right" style="width: 100%" />
+          <el-input
+            v-model="form.supplierId"
+            :disabled="supplierLocked"
+            type="text"
+            maxlength="64"
+            placeholder="请输入供应商ID（支持字母、编号等，如 abc、S-001）"
+          />
+        </el-form-item>
+        <el-form-item label="物料编码">
+          <el-input v-model="form.materialCode" placeholder="从升级检查创建时会自动带入" />
         </el-form-item>
         <el-form-item label="升级原因">
           <el-input v-model="form.escalationReason" type="textarea" :rows="3" placeholder="例如：90天内同类不良≥3次" />
@@ -93,11 +107,11 @@
         <el-divider />
         <div class="timeline-card"><b>发起升级</b><p>{{ workflowRow.escalationReason }}</p><small>{{ workflowRow.createdBy }} · {{ workflowRow.createdAt?.slice(0, 16) }}</small></div>
         <div v-if="workflowRow.reviewedAt" class="timeline-card"><b>质量经理审核</b><p>{{ workflowRow.reviewOpinion }}</p><small>{{ workflowRow.reviewedBy }} · {{ workflowRow.reviewedAt?.slice(0, 16) }}</small></div>
-        <div v-if="workflowRow.actionPlan" class="timeline-card"><b>升级措施</b><p>{{ workflowRow.actionPlan }}</p><small>责任人：{{ workflowRow.ownerName }}，期限：{{ workflowRow.dueDate || '-' }}</small></div>
+        <div v-if="workflowRow.actionPlan" class="timeline-card"><b>升级措施</b><p>{{ workflowRow.actionPlan }}</p><small>责任人：{{ workflowRow.ownerName }}，填写人：{{ workflowRow.planFilledBy || '-' }}，期限：{{ workflowRow.dueDate || '-' }}</small></div>
         <div v-if="workflowRow.executionRecord" class="timeline-card"><b>执行跟踪</b><p>{{ workflowRow.executionRecord }}</p><small>{{ workflowRow.executedBy }} · {{ workflowRow.executedAt?.slice(0, 16) }}</small></div>
         <div v-if="workflowRow.verifiedAt" class="timeline-card"><b>效果验证：{{ workflowRow.verificationResult === 'PASS' ? '通过' : '不通过' }}</b><p>{{ workflowRow.verificationEvidence }}</p><small>{{ workflowRow.verifiedBy }} · {{ workflowRow.verifiedAt?.slice(0, 16) }}</small></div>
         <div v-if="workflowRow.closedAt" class="timeline-card"><b>关闭审批</b><p>{{ workflowRow.closeReason }}</p><small>{{ workflowRow.closedBy }} · {{ workflowRow.closedAt?.slice(0, 16) }}</small></div>
-        <el-form v-if="workflowRow.processStage === 'PLAN'" :model="workflowForm" label-width="92px" class="workflow-form"><el-form-item label="升级措施"><el-input v-model="workflowForm.actionPlan" type="textarea" /></el-form-item><el-form-item label="责任人"><el-input v-model="workflowForm.ownerName" /></el-form-item><el-form-item label="完成期限"><el-date-picker v-model="workflowForm.dueDate" value-format="YYYY-MM-DD" /></el-form-item><el-button type="primary" @click="submitPlan">提交措施</el-button></el-form>
+        <el-form v-if="workflowRow.processStage === 'PLAN'" :model="workflowForm" label-width="92px" class="workflow-form"><el-form-item label="升级措施"><el-input v-model="workflowForm.actionPlan" type="textarea" /></el-form-item><el-form-item label="责任人"><el-input v-model="workflowForm.ownerName" /></el-form-item><el-form-item label="填写人"><el-input :model-value="workflowRow.planFilledBy || '提交后自动绑定当前账号'" disabled /></el-form-item><el-form-item label="完成期限"><el-date-picker v-model="workflowForm.dueDate" value-format="YYYY-MM-DD" /></el-form-item><el-button type="primary" @click="submitPlan">提交措施</el-button></el-form>
         <el-form v-else-if="workflowRow.processStage === 'EXECUTION'" :model="workflowForm" class="workflow-form"><el-form-item label="执行记录"><el-input v-model="workflowForm.executionRecord" type="textarea" /></el-form-item><el-button type="primary" @click="submitExecution">提交执行记录</el-button></el-form>
         <el-form v-else-if="workflowRow.processStage === 'VERIFICATION'" :model="workflowForm" class="workflow-form"><el-form-item label="验证结论"><el-radio-group v-model="workflowForm.result"><el-radio value="PASS">通过</el-radio><el-radio value="FAIL">不通过</el-radio></el-radio-group></el-form-item><el-form-item label="验证依据"><el-input v-model="workflowForm.evidence" type="textarea" /></el-form-item><el-button type="primary" @click="submitVerification">提交验证</el-button></el-form>
         <el-form v-else-if="workflowRow.processStage === 'PENDING_CLOSE_APPROVAL'" :model="workflowForm" class="workflow-form"><el-form-item label="审批意见"><el-input v-model="workflowForm.reason" type="textarea" /></el-form-item><el-button type="success" @click="submitClose">审批关闭</el-button></el-form>
@@ -151,6 +165,7 @@ import {
 } from '@/api/escalation'
 import { EscalationStatusEnum } from '@/enums/exception'
 import type { Escalation, EscalationCheckResultVO, TriggeredSupplier } from '@/types/escalation'
+import { useAuthStore } from '@/stores/auth'
 
 const loading = ref(false)
 const checkLoading = ref(false)
@@ -159,6 +174,7 @@ const list = ref<Escalation[]>([])
 const total = ref(0)
 const filterStatus = ref('')
 const query = reactive({ page: 1, size: 10 })
+const checkForm = reactive({ daysWindow: 90, minRepeatCount: 3 })
 
 const dialogVisible = ref(false)
 const checkResultVisible = ref(false)
@@ -172,13 +188,17 @@ const workflowVisible = ref(false)
 const workflowRow = ref<Escalation | null>(null)
 const workflowForm = reactive({ actionPlan: '', ownerName: '', dueDate: '', executionRecord: '', result: 'PASS' as 'PASS' | 'FAIL', evidence: '', reason: '' })
 
+const auth = useAuthStore()
+
 const form = reactive({
-  supplierId: undefined as number | undefined,
+  supplierId: '' as string,
+  materialCode: '',
   escalationReason: '',
   escalationAction: '加密审核',
   relatedExceptionIds: '',
   remark: '',
 })
+const supplierLocked = ref(false)
 
 async function loadList() {
   loading.value = true
@@ -202,7 +222,10 @@ async function loadList() {
 async function checkEscalation() {
   checkLoading.value = true
   try {
-    const res = await checkEscalationApi()
+    const res = await checkEscalationApi({
+      daysWindow: checkForm.daysWindow,
+      minRepeatCount: checkForm.minRepeatCount,
+    })
     if (res.code === 0) {
       checkResult.value = res.data
       checkResultVisible.value = true
@@ -216,7 +239,9 @@ async function checkEscalation() {
 }
 
 function openForm() {
-  form.supplierId = undefined
+  supplierLocked.value = false
+  form.supplierId = ''
+  form.materialCode = ''
   form.escalationReason = ''
   form.escalationAction = '加密审核'
   form.relatedExceptionIds = ''
@@ -229,7 +254,9 @@ function quickCreate(row: TriggeredSupplier) {
     ElMessage.warning('该来料记录尚未匹配供应商主数据，请使用自动升级任务处理')
     return
   }
-  form.supplierId = row.supplierId
+  form.supplierId = String(row.supplierId)
+  supplierLocked.value = true
+  form.materialCode = row.materialCode || ''
   form.escalationReason = `${row.defectDesc} 在 ${row.windowDays} 天内重复发生 ${row.repeatCount} 次`
   form.escalationAction = '加密审核'
   form.relatedExceptionIds = row.relatedExceptionIds.join(',')
@@ -250,6 +277,7 @@ async function submit() {
   try {
     const res = await createEscalationApi({
       supplierId: form.supplierId,
+      materialCode: form.materialCode,
       escalationReason: form.escalationReason,
       escalationAction: form.escalationAction,
       relatedExceptionIds: form.relatedExceptionIds,
@@ -267,7 +295,12 @@ async function submit() {
   }
 }
 
-function openWorkflow(row: Escalation) { workflowRow.value = row; workflowVisible.value = true }
+function openWorkflow(row: Escalation) {
+  workflowRow.value = row
+  // 责任人默认绑定当前登录用户（已指定则保持原值）
+  workflowForm.ownerName = row.ownerName || auth.user?.realName || auth.user?.account || ''
+  workflowVisible.value = true
+}
 function stageLabel(stage?: string) { return ({ PENDING_REVIEW: '待审核', PLAN: '制定措施', EXECUTION: '执行跟踪', VERIFICATION: '效果验证', PENDING_CLOSE_APPROVAL: '待关闭审批', CLOSED: '已关闭', REJECTED: '已驳回' } as Record<string, string>)[stage || ''] || '待审核' }
 function stageIndex(stage?: string) { return ({ PENDING_REVIEW: 1, PLAN: 2, EXECUTION: 3, VERIFICATION: 4, PENDING_CLOSE_APPROVAL: 5, CLOSED: 6 } as Record<string, number>)[stage || ''] || 1 }
 async function refreshWorkflow(call: Promise<any>, text: string) { const res = await call; if (res.code === 0) { workflowRow.value = res.data; ElMessage.success(text); loadList() } }
@@ -305,6 +338,9 @@ async function submitReview() {
       opinion: reviewOpinion.value.trim(),
     })
     if (res.code === 0) {
+      // 抽屉仍持有审核前的对象；审核接口返回的是已进入下一阶段的最新升级单。
+      // 立即同步它，才能将“审核通过/驳回”操作区切换为“制定措施”表单。
+      workflowRow.value = res.data
       ElMessage.success('升级审核已完成')
       reviewVisible.value = false
       loadList()
@@ -335,8 +371,11 @@ onMounted(loadList)
 }
 .panel-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
 }
+.check-config-label { color: #657b8d; font-size: 12px; white-space: nowrap; }
+.check-number { width: 64px; }
 .panel-filter {
   display: flex;
   justify-content: flex-end;
