@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     :model-value="modelValue"
-    :title="isCreate ? '新增成品入库检验' : '成品入库检验详情'"
+    :title="isCreate ? '新增成品/半成品检验' : '成品/半成品检验详情'"
     width="860px"
     :close-on-click-modal="false"
     destroy-on-close
@@ -124,7 +124,12 @@
             <el-form-item label="物料编码"><el-input v-model="form.materialCode" /></el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="分类"><el-input v-model="form.category" /></el-form-item>
+            <el-form-item label="产品分类">
+              <el-select v-model="form.category" style="width:100%">
+                <el-option label="成品" value="成品" />
+                <el-option label="半成品" value="半成品" />
+              </el-select>
+            </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="单位"><el-input v-model="form.unit" /></el-form-item>
@@ -329,7 +334,7 @@ function emptyForm(): FinishedGoodsInspection {
     unqualifiedQty: 0,
     unit: '',
     inspectorName: '',
-    category: '',
+    category: '成品',
     qcReviewer: '',
     qcReviewTime: '',
     mgrRepresentative: '',

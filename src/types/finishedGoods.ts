@@ -90,6 +90,7 @@ export interface FinishedGoodsInspection {
 /** 成品检验列表查询参数 */
 export interface FinishedGoodsListParams extends PageParams {
   keyword?: string
+  category?: string
   inspectionResult?: string
   qcReview?: string
   mgrApproval?: string

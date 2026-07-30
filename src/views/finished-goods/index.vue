@@ -23,6 +23,10 @@
           @keyup.enter="search"
           @clear="search"
         />
+        <el-select v-model="filters.category" placeholder="产品分类" clearable style="width: 120px" @change="search">
+          <el-option label="成品" value="成品" />
+          <el-option label="半成品" value="半成品" />
+        </el-select>
         <el-select v-model="filters.inspectionResult" placeholder="检验结果" clearable style="width: 120px" @change="search">
           <el-option label="合格" value="合格" />
           <el-option label="不合格" value="不合格" />
@@ -65,6 +69,13 @@
         <el-table-column prop="id" label="ID" width="70" align="center" sortable="custom" />
         <el-table-column prop="reportNo" label="报告编号" width="160" show-overflow-tooltip />
         <el-table-column prop="productName" label="产品名称" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="category" label="产品分类" width="100" align="center">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.category === '半成品' ? 'warning' : 'primary'">
+              {{ row.category || '成品' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="modelSpec" label="型号规格" width="120" show-overflow-tooltip />
         <el-table-column prop="prodBatchOrSn" label="生产批号/产品编号" width="150" show-overflow-tooltip />
         <el-table-column prop="inspectionResult" label="检验结果" width="100" align="center">
@@ -138,18 +149,32 @@
         <!-- 选择来料 -->
         <div class="bind-card" style="margin-top:14px">
           <div class="bind-card-title">选择来料记录</div>
-          <div class="bind-input-row">
-            <el-input-number
-              v-model="bindInput.matId"
-              :min="1"
-              placeholder="来料检验记录 ID"
-              style="width: 200px"
-              controls-position="right"
-            />
-            <el-button type="primary" size="default" :loading="queryingMat" @click="queryMaterial">
-              查询来料
-            </el-button>
-          </div>
+          <el-select
+            v-model="bindInput.matId"
+            filterable
+            remote
+            reserve-keyword
+            clearable
+            placeholder="输入物料编码/批号/记录号/供应商检索来料记录"
+            :remote-method="searchMaterial"
+            :loading="queryingMat"
+            style="width: 100%"
+            @change="onMaterialSelect"
+          >
+            <el-option
+              v-for="opt in materialOptions"
+              :key="opt.id"
+              :label="`${opt.recordNo}（${opt.materialCode} / ${opt.materialBatchNo}）`"
+              :value="opt.id"
+            >
+              <div style="display:flex; justify-content:space-between; gap:12px">
+                <span>{{ opt.recordNo }}</span>
+                <span style="color:#8492a6; font-size:12px">
+                  {{ opt.materialCode }} / {{ opt.materialBatchNo }} / {{ opt.supplierName }} / {{ opt.inspectionResult }}
+                </span>
+              </div>
+            </el-option>
+          </el-select>
 
           <!-- 来料信息展示 -->
           <div v-if="bindMat" class="bind-mat-info">
@@ -212,15 +237,16 @@ import {
   deleteFinishedGoodsApi,
 } from '@/api/finishedGoods'
 import { bindMaterialToFinishedGoodsApi } from '@/api/trace'
-import { getMaterialInspectionDetailApi } from '@/api/incoming'
+import { getMaterialInspectionListApi } from '@/api/incoming'
 import { getErrorMessage, isErrorNotified } from '@/api/request-error'
 import type { FinishedGoodsInspection, FinishedGoodsListParams } from '@/types/finishedGoods'
-import type { MaterialInspection } from '@/types/incoming'
+import type { MaterialInspection, MaterialInspectionListParams } from '@/types/incoming'
 import FinishedGoodsDetailDialog from './components/FinishedGoodsDetailDialog.vue'
 
 // ── 筛选 ──────────────────────────────────────────────────────
 const filters = reactive<FinishedGoodsListParams & { dateRange?: [string, string] | null }>({
   keyword: '',
+  category: '',
   inspectionResult: '',
   qcReview: '',
   mgrApproval: '',
@@ -238,6 +264,7 @@ async function search() {
 
 function resetFilters() {
   filters.keyword = ''
+  filters.category = ''
   filters.inspectionResult = ''
   filters.qcReview = ''
   filters.mgrApproval = ''
@@ -270,6 +297,7 @@ async function loadList() {
   try {
     const p: FinishedGoodsListParams = {
       keyword: filters.keyword || undefined,
+      category: filters.category || undefined,
       inspectionResult: filters.inspectionResult || undefined,
       qcReview: filters.qcReview || undefined,
       mgrApproval: filters.mgrApproval || undefined,
@@ -377,31 +405,43 @@ const bindInput = reactive({ matId: null as number | null })
 const bindResult = ref<{ bound: boolean; message: string; finishedGoodsNodeId?: number; finishedGoodsSn?: string; materialNodeId?: number; materialBatchNo?: string } | null>(null)
 const queryingMat = ref(false)
 const binding = ref(false)
+const materialOptions = ref<MaterialInspection[]>([])
 
 function openBind(row: FinishedGoodsInspection) {
   bindFg.value = row
   bindMat.value = null
   bindInput.matId = null
+  materialOptions.value = []
   bindResult.value = null
   bindVisible.value = true
+  // 预载同物料的来料记录，方便直接选择
+  if (row.materialCode) searchMaterial('')
 }
 
-async function queryMaterial() {
-  if (!bindInput.matId) return
+async function searchMaterial(query: string) {
   queryingMat.value = true
-  bindMat.value = null
   try {
-    const res = await getMaterialInspectionDetailApi(bindInput.matId)
+    const params: MaterialInspectionListParams = {
+      page: 1,
+      size: 20,
+      keyword: query || undefined,
+      materialCode: bindFg.value?.materialCode || undefined,
+    }
+    const res = await getMaterialInspectionListApi(params)
     if (res.code === 0 && res.data) {
-      bindMat.value = res.data
+      materialOptions.value = res.data.list || []
     } else {
-      ElMessage.error('未找到该来料记录')
+      materialOptions.value = []
     }
   } catch (e: any) {
     if (!isErrorNotified(e)) ElMessage.error(`查询失败：${getErrorMessage(e)}`)
   } finally {
     queryingMat.value = false
   }
+}
+
+function onMaterialSelect(id: number) {
+  bindMat.value = materialOptions.value.find((o) => o.id === id) || null
 }
 
 async function doBind() {

@@ -10,7 +10,7 @@
       </div>
       <div class="header-right">
         <button class="sample-btn" @click="openSampleData">示例数据</button>
-        <button class="entry-btn" @click="entryVisible = true">+ 手动录入</button>
+        <button class="entry-btn" @click="entryVisible = true">维护关联</button>
         <span class="header-tag">M0</span>
       </div>
     </header>
@@ -111,15 +111,9 @@
       v-model:visible="detailVisible"
       :node-id="detailNodeId"
     />
-    <el-drawer v-model="entryVisible" title="手动录入追溯节点" size="420px">
+    <el-drawer v-model="entryVisible" title="维护追溯关联" size="420px">
       <el-form label-position="top">
-        <el-form-item label="节点类型"><el-select v-model="entry.nodeType"><el-option label="成品" value="FINISHED_GOOD"/><el-option label="半成品" value="SEMI_FINISHED"/><el-option label="物料" value="MATERIAL"/></el-select></el-form-item>
-        <el-form-item label="条码"><el-input v-model="entry.barcode" placeholder="唯一条码"/></el-form-item>
-        <el-form-item label="名称"><el-input v-model="entry.name"/></el-form-item>
-        <el-form-item label="物料代码" v-if="entry.nodeType==='MATERIAL'"><el-input v-model="entry.materialCode"/></el-form-item>
-        <el-form-item label="物料批号" v-if="entry.nodeType==='MATERIAL'"><el-input v-model="entry.materialBatchNo"/></el-form-item>
-        <el-button type="primary" @click="saveEntry">保存节点</el-button>
-        <el-divider>建立父子关系</el-divider>
+        <p class="relation-hint">成品、半成品和来料节点由各自的检验主数据自动同步；此处仅维护已有节点之间的父子关系。</p>
         <el-form-item label="父节点 ID"><el-input v-model="relation.parentNodeId" placeholder="产品或半成品节点 ID"/></el-form-item>
         <el-form-item label="子节点 ID"><el-input v-model="relation.childNodeId" placeholder="半成品或物料节点 ID"/></el-form-item>
         <el-form-item label="数量"><el-input v-model="relation.quantity" placeholder="可选"/></el-form-item>
@@ -163,7 +157,7 @@
 
 <script setup lang="ts">
 // ===== M0: 全链路追溯 =====
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { traceQueryApi } from '@/api/trace'
@@ -216,12 +210,7 @@ async function openSampleData() {
     ElMessage.error(getErrorMessage(e, '示例数据加载失败，请确认后端已启动'))
   } finally { sampleLoading.value = false }
 }
-const entry = ref({ nodeType: 'MATERIAL', barcode: '', name: '', materialCode: '', materialBatchNo: '' })
 const relation = ref({ parentNodeId: '', childNodeId: '', quantity: '' })
-async function saveEntry() {
-  try { await axios.post(`${incomingTraceBase}/nodes`, entry.value, { headers: { Authorization: `Bearer ${sessionStorage.getItem('qms_token') || ''}` } }); ElMessage.success('节点已保存，可继续建立关系'); entryVisible.value = false }
-  catch (e: any) { ElMessage.error(getErrorMessage(e, '节点保存失败，请检查必填字段和条码是否重复')) }
-}
 async function saveRelation() {
   try { await axios.post(`${incomingTraceBase}/relations`, relation.value, { headers: { Authorization: `Bearer ${sessionStorage.getItem('qms_token') || ''}` } }); ElMessage.success('关系已保存'); relation.value = { parentNodeId: '', childNodeId: '', quantity: '' } }
   catch (e: any) { ElMessage.error(getErrorMessage(e, '关系保存失败，请检查节点 ID 和是否形成环路')) }
@@ -245,13 +234,24 @@ const directions = computed(() =>
 
 const directionLabel = computed(() => TRACE_DIRECTION_LABELS[direction.value])
 
-const quickItems = computed(() =>
-  direction.value === TraceDirectionEnum.BACKWARD
-    ? ['MAT-A01-LOT-20260721', 'MAT-A03-LOT-20260718', 'MAT-B01-LOT-20260721']
-    : direction.value === TraceDirectionEnum.BATCH_IMPACT
-      ? ['LOT-20260721', 'LOT-20260718', 'LOT-20260719']
-      : ['FG-A100', 'FG-B200', 'SF-A110'],
-)
+const quickItems = ref<string[]>([])
+
+async function loadQuickItems() {
+  try {
+    const { data } = await axios.get(`${incomingTraceBase}/nodes`, {
+      headers: { Authorization: `Bearer ${sessionStorage.getItem('qms_token') || ''}` },
+    })
+    quickItems.value = (data.data || [])
+      .filter((node: any) => ['FINISHED_GOOD', 'SEMI_FINISHED', 'MATERIAL'].includes(node.nodeType))
+      .map((node: any) => node.barcode)
+      .filter((barcode: string, index: number, values: string[]) => barcode && values.indexOf(barcode) === index)
+      .slice(0, 6)
+  } catch {
+    quickItems.value = []
+  }
+}
+
+onMounted(loadQuickItems)
 
 function setDirection(d: TraceDirectionEnum) {
   direction.value = d
@@ -364,6 +364,7 @@ if (inputValue.value) doQuery()
   padding: 2px 6px;
 }
 .entry-btn { border:0; background:#1b3a5b; color:#fff; border-radius:4px; padding:7px 12px; margin-right:10px; font-weight:600; cursor:pointer; }
+.relation-hint { margin: 0 0 18px; color: #697782; line-height: 1.65; font-size: 13px; }
 .sample-btn { border:1px solid #b8763e; background:#fffaf5; color:#9b5c24; border-radius:4px; padding:6px 12px; margin-right:10px; font-weight:600; cursor:pointer; }
 .sample-btn:hover { background:#faf0e5; }
 .sample-note { margin:0 0 14px; color:#697782; font-size:13px; }
