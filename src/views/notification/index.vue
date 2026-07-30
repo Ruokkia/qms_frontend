@@ -55,16 +55,18 @@
         </div>
 
         <div class="pagination-wrap">
-          <el-pagination
-            v-model:current-page="page"
-            v-model:page-size="size"
-            background
-            layout="total, sizes, prev, pager, next"
-            :total="total"
-            :page-sizes="[10, 20, 50]"
-            @size-change="handleSizeChange"
-            @current-change="handlePageChange"
-          />
+          <el-config-provider :locale="notificationPaginationLocale">
+            <el-pagination
+              v-model:current-page="page"
+              v-model:page-size="size"
+              background
+              layout="total, sizes, prev, pager, next"
+              :total="total"
+              :page-sizes="[10, 20, 50]"
+              @size-change="handleSizeChange"
+              @current-change="handlePageChange"
+            />
+          </el-config-provider>
         </div>
       </aside>
 
@@ -114,6 +116,7 @@ import {
   buildNotificationListQuery,
   type NotificationReadFilter,
 } from '@/utils/notification-query'
+import { notificationPaginationLocale } from '@/utils/notification-pagination-locale'
 
 const route = useRoute()
 const router = useRouter()

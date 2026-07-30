@@ -93,8 +93,8 @@ import { useRouter } from 'vue-router'
 import { Search } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { NAV_GROUPS } from '@/config/nav'
-import type { ModuleKey } from '@/types'
 import { filterNavigationByModules } from '@/utils/dashboard-navigation'
+import { filterQuickActions, type DashboardQuickAction } from '@/utils/dashboard-quick-actions'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -116,13 +116,14 @@ const today = computed(() => {
   return `${date.getFullYear()} 年 ${date.getMonth() + 1} 月 ${date.getDate()} 日 · 星期${week}`
 })
 
-const QUICK_ACTIONS: { key: ModuleKey; title: string; icon: string; path: string }[] = [
-  { key: 'fai', title: '录入首件', icon: 'EditPen', path: '/fai' },
-  { key: 'exception', title: '上报异常', icon: 'Warning', path: '/exception' },
-  { key: 'trace', title: '查询追溯', icon: 'Search', path: '/trace' },
+const QUICK_ACTIONS: DashboardQuickAction[] = [
+  { key: 'fai', title: '录入首件', icon: 'EditPen', path: '/fai', moduleKey: 'fai' },
+  { key: 'exception', title: '上报异常', icon: 'Warning', path: '/exception', moduleKey: 'exception' },
+  { key: 'trace', title: '查询追溯', icon: 'Search', path: '/trace', moduleKey: 'trace' },
+  { key: 'notifications', title: '消息中心', icon: 'Bell', path: '/notifications' },
 ]
 
-const quickActions = computed(() => QUICK_ACTIONS.filter((action) => auth.hasModule(action.key)))
+const quickActions = computed(() => filterQuickActions(QUICK_ACTIONS, auth.allowedModules))
 
 const visibleGroups = computed(() => filterNavigationByModules(NAV_GROUPS, auth.allowedModules))
 
