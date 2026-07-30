@@ -19,6 +19,11 @@ const routes: RouteRecordRaw[] = [
         name: 'Dashboard',
         component: () => import('@/views/dashboard/index.vue'),
       },
+      {
+        path: 'notifications',
+        name: 'Notifications',
+        component: () => import('@/views/notification/index.vue'),
+      },
       { path: 'admin', name: 'SystemAdmin', component: () => import('@/views/admin/index.vue') },
       {
         path: 'incoming',

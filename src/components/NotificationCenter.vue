@@ -21,6 +21,7 @@
           <span class="notification-title">通知中心</span>
           <div class="notification-actions">
             <el-button link type="primary" size="small" @click="markAllRead">全部已读</el-button>
+            <el-button link type="primary" size="small" @click="goToMore">查看全部</el-button>
             <el-button link type="info" size="small" @click="refresh">刷新</el-button>
           </div>
         </div>
@@ -56,9 +57,6 @@
           <el-empty v-if="!loading && list.length === 0" description="暂无通知" :image-size="60" />
         </div>
 
-        <div v-if="total > list.length" class="notification-more" @click="goToMore">
-          查看全部通知
-        </div>
       </div>
     </el-popover>
   </div>
@@ -156,8 +154,7 @@ function handleClick(item: Notification) {
 
 function goToMore() {
   visible.value = false
-  // 若有通知列表页可跳转，当前留提示
-  ElMessage.info('更多通知请查看系统消息中心')
+  router.push('/notifications')
 }
 
 function typeColor(type: string) {
@@ -171,12 +168,14 @@ function formatTime(time?: string) {
 
 onMounted(() => {
   loadUnread()
+  window.addEventListener('notification-read', loadUnread)
   // 每 60 秒轮询未读数
   pollTimer = window.setInterval(loadUnread, 60000)
 })
 
 onUnmounted(() => {
   if (pollTimer) window.clearInterval(pollTimer)
+  window.removeEventListener('notification-read', loadUnread)
 })
 </script>
 
@@ -282,17 +281,6 @@ onUnmounted(() => {
   flex-shrink: 0;
   padding: 0;
   margin-top: -2px;
-}
-.notification-more {
-  text-align: center;
-  padding: 10px;
-  font-size: 12px;
-  color: #3e6b95;
-  border-top: 1px solid #f0ede9;
-  cursor: pointer;
-}
-.notification-more:hover {
-  color: #1b3a5b;
 }
 </style>
 
