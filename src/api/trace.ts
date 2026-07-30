@@ -9,6 +9,7 @@ import type { ApiResult } from '@/types'
 import type { TraceTreeResult, TraceNodeDetail, TraceQueryParams } from '@/types/trace'
 import { TraceDirectionEnum } from '@/enums/trace'
 
+import { buildTraceAuthorizationHeaders } from './trace-authorization'
 /** 追溯 API 统一走同源代理：开发时 Vite 转发至 localhost:8080，生产时 Spring Boot 直接提供 */
 const incomingTraceBase = '/api/v2/incoming-trace'
 
@@ -50,6 +51,15 @@ export function traceQueryApi(
     },
   })
 */
+}
+export function resolveTraceRootBarcodeApi(
+  sourceType: 'MATERIAL' | 'FINISHED_GOODS',
+  sourceId: number,
+): Promise<ApiResult<string>> {
+  return axios.get(`${incomingTraceBase}/root-barcode`, {
+    params: { sourceType, sourceId },
+    headers: buildTraceAuthorizationHeaders(sessionStorage.getItem('qms_token')),
+  }).then((response: any) => response.data as ApiResult<string>)
 }
 
 /** 节点详情（含批次信息、父子节点、IQC检验明细） */

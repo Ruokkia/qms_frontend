@@ -314,6 +314,11 @@ watch(
   () => {
     const routeCode = typeof route.query.code === 'string' ? route.query.code : ''
     if (routeCode) inputValue.value = routeCode
+    const routeDirection = typeof route.query.direction === 'string' ? route.query.direction : ''
+    if (routeDirection === TraceDirectionEnum.FULL) {
+      direction.value = TraceDirectionEnum.FULL
+    }
+
     if (inputValue.value) doQuery()
   },
 )

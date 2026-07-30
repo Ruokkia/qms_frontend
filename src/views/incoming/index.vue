@@ -160,6 +160,7 @@
         <el-table-column label="操作" width="280" align="center" fixed="right">
           <template #default="{ row }">
             <button class="text-btn" @click="openDetail(row.id)">详情</button>
+            <button class="text-btn text-btn-trace" @click="openTrace(row)">??</button>
             <button class="text-btn" style="margin-left:4px" @click="openEdit(row.id)">编辑</button>
             <button class="text-btn text-btn-danger" style="margin-left:4px" @click="deleteRecord(row.id)">删除</button>
             <button
@@ -213,35 +214,8 @@
       </template>
     </el-dialog>
 
-    <!-- 导入弹窗 -->
-    <el-dialog v-model="importVisible" title="批量导入物料检验记录" width="560">
-      <div class="import-body">
-        <p class="import-tip">请在下方粘贴 JSON 数组格式的物料检验记录。系统将自动为不合格记录创建异常单。</p>
-        <el-input v-model="importJson" type="textarea" :rows="8" placeholder='[{"recordNo":"IQC-...","inspectionResult":"不合格",...}]' />
-        <div v-if="importResult" class="import-result">
-          <div class="result-item">
-            <span class="result-label">导入总数</span>
-            <span class="result-value">{{ importResult.totalCount }}</span>
-          </div>
-          <div class="result-item">
-            <span class="result-label">成功落库</span>
-            <span class="result-value">{{ importResult.successCount }}</span>
-          </div>
-          <div class="result-item">
-            <span class="result-label">失败数</span>
-            <span class="result-value">{{ importResult.failCount }}</span>
-          </div>
-          <div class="result-item">
-            <span class="result-label">自动建异常单</span>
-            <span class="result-value">{{ importResult.createdExceptionCount }}</span>
-          </div>
-        </div>
-      </div>
-      <template #footer>
-        <el-button @click="importVisible = false">关闭</el-button>
-        <el-button type="primary" :loading="importLoading" @click="doImport">开始导入</el-button>
-      </template>
-    </el-dialog>
+    <!-- 导入弹窗（Excel 上传 + 预览确认 + 失败明细） -->
+    <ImportDialog v-model="importVisible" @success="onImported" />
   </div>
 </template>
 
@@ -260,22 +234,22 @@ import {
   updateMaterialInspectionApi,
   deleteMaterialInspectionApi,
   reconcileMaterialInspectionApi,
-  importMaterialInspectionApi,
 } from '@/api/incoming'
 import {
   getExceptionBySourceIdApi,
   createExceptionFromInspectionApi,
 } from '@/api/exception'
+import { resolveTraceRootBarcodeApi } from '@/api/trace'
 import type {
   MaterialInspection,
   MaterialInspectionStats,
   MaterialInspectionReconcileResultVO,
-  MaterialInspectionImportResultVO,
   KeySupplierTrend,
 } from '@/types/incoming'
 import TrendChart from './components/TrendChart.vue'
 import SupplierRankChart from './components/SupplierRankChart.vue'
 import IncomingDetailDialog from './components/IncomingDetailDialog.vue'
+import ImportDialog from './components/ImportDialog.vue'
 import QualityRuleDialog from '@/components/quality/QualityRuleDialog.vue'
 import { getErrorMessage, isErrorNotified } from '@/api/request-error'
 
@@ -283,6 +257,19 @@ const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
+
+async function openTrace(row: MaterialInspection) {
+  try {
+    const res = await resolveTraceRootBarcodeApi('MATERIAL', row.id)
+    if (res.code !== 0 || !res.data) {
+      ElMessage.error(res.message || '????????????')
+      return
+    }
+    await router.push({ path: '/trace', query: { code: res.data, direction: 'full' } })
+  } catch (e: any) {
+    ElMessage.error(getErrorMessage(e, '??????'))
+  }
+}
 // ── KPI 看板 ────────────────────────────────────────────────
 const statsLoading = ref(false)
 const stats = ref<MaterialInspectionStats | null>(null)
@@ -559,39 +546,17 @@ async function doReconcile() {
   }
 }
 
-// ── 导入 ────────────────────────────────────────────────────
+// ── 导入（Excel 上传，复用 ImportDialog）────────────────────
 const importVisible = ref(false)
-const importLoading = ref(false)
-const importJson = ref('')
-const importResult = ref<MaterialInspectionImportResultVO | null>(null)
 
 function openImport() {
-  importJson.value = ''
-  importResult.value = null
   importVisible.value = true
 }
 
-async function doImport() {
-  if (!importJson.value.trim()) {
-    ElMessage.warning('请输入导入数据')
-    return
-  }
-  importLoading.value = true
-  try {
-    const list = JSON.parse(importJson.value)
-    const res = await importMaterialInspectionApi({ list, autoCreateException: true })
-    if (res.code === 0) {
-      importResult.value = res.data
-      ElMessage.success(`导入成功 ${res.data.successCount} 条，自动建异常单 ${res.data.createdExceptionCount} 个`)
-      loadStats()
-      loadList()
-    }
-  } catch (e) {
-    ElMessage.error('导入数据解析失败，请检查 JSON 格式')
-    console.error('导入失败', e)
-  } finally {
-    importLoading.value = false
-  }
+// 导入成功后的列表与看板联动刷新
+function onImported() {
+  loadStats()
+  loadList()
 }
 
 // ── 分公司切换刷新 ───────────────────────────────────────────
@@ -851,6 +816,15 @@ loadKeySupplierTrend()
 .text-btn-danger {
   color: #e04a3e;
   border-color: #e0c5c0;
+}
+.text-btn-trace {
+  color: #27844f;
+  border-color: #94d5aa;
+}
+.text-btn-trace:hover {
+  background: #27844f;
+  border-color: #27844f;
+  color: #fff;
 }
 .text-btn-danger:hover {
   background: #e04a3e;

@@ -102,6 +102,7 @@
           <template #default="{ row }">
             <button class="text-btn" @click="openDetail(row.id)">详情</button>
             <button class="text-btn" style="margin-left:4px" @click="openEdit(row.id)">编辑</button>
+            <button class="text-btn text-btn-trace" style="margin-left:4px" @click="openTrace(row)">??</button>
             <button class="text-btn text-btn-danger" style="margin-left:4px" @click="deleteRecord(row.id)">删除</button>
             <button class="text-btn text-btn-bind" style="margin-left:4px" @click="openBind(row)">绑定来料</button>
           </template>
@@ -229,6 +230,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRouter } from 'vue-router'
 import {
   getFinishedGoodsListApi,
   getFinishedGoodsDetailApi,
@@ -236,7 +238,7 @@ import {
   updateFinishedGoodsApi,
   deleteFinishedGoodsApi,
 } from '@/api/finishedGoods'
-import { bindMaterialToFinishedGoodsApi } from '@/api/trace'
+import { bindMaterialToFinishedGoodsApi, resolveTraceRootBarcodeApi } from '@/api/trace'
 import { getMaterialInspectionListApi } from '@/api/incoming'
 import { getErrorMessage, isErrorNotified } from '@/api/request-error'
 import type { FinishedGoodsInspection, FinishedGoodsListParams } from '@/types/finishedGoods'
@@ -256,6 +258,7 @@ const filters = reactive<FinishedGoodsListParams & { dateRange?: [string, string
   page: 1,
   size: 20,
 })
+const router = useRouter()
 
 async function search() {
   filters.page = 1
@@ -323,6 +326,18 @@ const detailVisible = ref(false)
 const detail = ref<FinishedGoodsInspection | null>(null)
 const detailEditMode = ref(false)
 
+async function openTrace(row: FinishedGoodsInspection) {
+  try {
+    const res = await resolveTraceRootBarcodeApi('FINISHED_GOODS', row.id)
+    if (res.code !== 0 || !res.data) {
+      ElMessage.error(res.message || 'Trace node is unavailable')
+      return
+    }
+    await router.push({ path: '/trace', query: { code: res.data, direction: 'full' } })
+  } catch (e: any) {
+    ElMessage.error(getErrorMessage(e, 'Trace navigation failed'))
+  }
+}
 async function openDetail(id: number) {
   try {
     const res = await getFinishedGoodsDetailApi(id)
@@ -574,6 +589,8 @@ onMounted(() => loadList())
 .text-btn-bind {
   color: #5b7a99;
 }
+.text-btn-trace { color: #27844f; }
+.text-btn-trace:hover { color: #176b3a; }
 .text-btn-bind:hover {
   color: #b8763e;
 }
