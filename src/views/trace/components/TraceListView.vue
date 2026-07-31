@@ -85,7 +85,7 @@ import {
 } from '@/enums/trace'
 
 const props = defineProps<{ result: TraceTreeResult }>()
-defineEmits<{ viewDetail: [id: number] }>()
+defineEmits<{ viewDetail: [id: string | number] }>()
 
 interface FlatRow {
   key: string

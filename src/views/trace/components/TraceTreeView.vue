@@ -35,7 +35,7 @@ const props = defineProps<{
   expandDepth: number
   direction: TraceDirectionEnum
 }>()
-const emit = defineEmits<{ viewDetail: [id: number] }>()
+const emit = defineEmits<{ viewDetail: [id: string | number] }>()
 
 const chartRef = ref<HTMLElement>()
 let chart: echarts.ECharts | null = null
@@ -49,7 +49,7 @@ const legendItems = [
 
 interface EchartsNode {
   name: string
-  nodeId: number
+  nodeId: string | number
   nodeType: string
   nodeCode: string
   label: string
@@ -89,7 +89,7 @@ function buildEchartsTree(): EchartsNode {
   return toEchartsNode(r.rootNode, [], queryId)
 }
 
-function toEchartsNode(node: TraceNode, children: EchartsNode[] = [], queryId?: number): EchartsNode {
+function toEchartsNode(node: TraceNode, children: EchartsNode[] = [], queryId?: string | number): EchartsNode {
   const nodeType = node.nodeType as NodeTypeEnum
   const graphStyle: Record<string, { color: string; label: string }> = {
     FINISHED_GOOD: { color: '#1B3A5B', label: '成品' },

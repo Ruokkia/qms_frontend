@@ -4,12 +4,26 @@
  * 严格对齐 qms-backend/docs/api/m0-m1-m2-api.md 第一篇 m0-3 接口契约。
  * 走真实后端，不经 Mock。
  */
-import axios from 'axios'
+import axios, { type AxiosResponse } from 'axios'
 import type { ApiResult } from '@/types'
-import type { TraceTreeResult, TraceNodeDetail, TraceQueryParams } from '@/types/trace'
+import type { TraceTreeResult, TraceNodeDetail, TraceQueryParams, TraceNode } from '@/types/trace'
 import { TraceDirectionEnum } from '@/enums/trace'
 
-import { buildTraceAuthorizationHeaders } from './trace-authorization'
+/** 后端原始追溯节点结构（convert 前） */
+interface RawTraceNode {
+  id: string | number
+  nodeType: string
+  barcode: string
+  name: string
+  productCode: string | null
+  specification: string | null
+  materialCode: string | null
+  materialBatchNo: string | null
+  plantCode?: string
+  category?: string
+  children?: RawTraceNode[]
+  upward?: RawTraceNode[]
+}
 /** 追溯 API 统一走同源代理：开发时 Vite 转发至 localhost:8080，生产时 Spring Boot 直接提供 */
 const incomingTraceBase = '/api/v2/incoming-trace'
 
@@ -31,68 +45,24 @@ export function traceQueryApi(
   return axios.get(`${incomingTraceBase}/tree`, {
     params: { rootBarcode: params.nodeCode, direction: directionMap[direction] },
     headers: { Authorization: `Bearer ${sessionStorage.getItem('qms_token') || ''}` },
-  }).then((response: any) => {
-    const data = response.data.data
-    const convert = (n: any): any => ({ id: n.id, nodeType: n.nodeType, nodeCode: n.barcode, name: n.name, productCode: n.productCode, specification: n.specification, materialCode: n.materialCode, materialBatchNo: n.materialBatchNo, children: (n.children || []).map(convert), batchInfo: n.materialBatchNo ? { batchNo: n.materialBatchNo, materialCode: n.materialCode, materialName: n.name } : null })
+  }).then((response: AxiosResponse<ApiResult<{ root: RawTraceNode; direction: string; visitedNodes: number; summary: Record<string, number> }>>) => {
+    const data = response.data.data!
+    const convert = (n: RawTraceNode): TraceNode => ({ id: n.id, nodeType: n.nodeType, nodeCode: n.barcode, name: n.name, productCode: n.productCode ?? undefined, specification: n.specification ?? undefined, materialCode: n.materialCode ?? undefined, materialBatchNo: n.materialBatchNo ?? undefined, parentId: null, children: (n.children || []).map(convert), batchInfo: n.materialBatchNo ? { batchNo: n.materialBatchNo, materialCode: n.materialCode ?? undefined, materialName: n.name } : null })
     const rootNode = convert(data.root)
-    const upward = (data.upward || data.root?.upward) ? (data.upward || data.root?.upward).map(convert) : undefined
-    return { code: 0, message: 'success', data: { rootNode, children: rootNode.children || [], upward, stats: { totalNodes: data.visitedNodes || 1, maxDepth: 8, levelCap: 8, batchCount: data.summary.materialBatches || 0, supplierCount: 0 } } } as ApiResult<TraceTreeResult>
+    const upward = data.root?.upward ? data.root.upward.map(convert) : undefined
+    return { code: 0, message: 'success', data: { rootNode, children: rootNode.children || [], upward, stats: { totalNodes: data.visitedNodes || 1, maxDepth: 8, levelCap: 8, batchCount: data.summary?.materialBatches || 0, supplierCount: 0 } } } as ApiResult<TraceTreeResult>
   })
-/*
-  const pathMap: Record<TraceDirectionEnum, string> = {
-    [TraceDirectionEnum.FORWARD]: '/trace/forward',
-    [TraceDirectionEnum.BACKWARD]: '/trace/backward',
-    [TraceDirectionEnum.FULL]: '/trace/full',
-  }
-  return apiGet<TraceTreeResult>(pathMap[direction], {
-    params: {
-      nodeCode: params.nodeCode,
-      maxLevel: params.maxLevel ?? TRACE_MAX_LEVEL,
-    },
-  })
-*/
-}
-export function resolveTraceRootBarcodeApi(
-  sourceType: 'MATERIAL' | 'FINISHED_GOODS',
-  sourceId: number,
-): Promise<ApiResult<string>> {
-  return axios.get(`${incomingTraceBase}/root-barcode`, {
-    params: { sourceType, sourceId },
-    headers: buildTraceAuthorizationHeaders(sessionStorage.getItem('qms_token')),
-  }).then((response: any) => response.data as ApiResult<string>)
 }
 
-/** 节点详情（含批次信息、父子节点、IQC检验明细） */
-export function getTraceNodeDetailApi(id: number): Promise<ApiResult<TraceNodeDetail>> {
+/** 节点详情（含批次信息）— 需传 type 参数（fg=成品表, mi=物料表） */
+export function getTraceNodeDetailApi(id: number, type: 'fg' | 'mi'): Promise<ApiResult<TraceNodeDetail>> {
   return axios.get(`${incomingTraceBase}/nodes/${id}`, {
+    params: { type },
     headers: { Authorization: `Bearer ${sessionStorage.getItem('qms_token') || ''}` },
-  }).then((response: any) => {
-    const data = response.data.data
-    const convert = (n: any): any => ({ id: n.id, nodeType: n.nodeType, nodeCode: n.barcode, name: n.name, productCode: n.productCode, specification: n.specification, materialCode: n.materialCode, materialBatchNo: n.materialBatchNo, children: (n.children || []).map(convert), batchInfo: n.materialBatchNo ? { batchNo: n.materialBatchNo, materialCode: n.materialCode, materialName: n.name } : null })
-    return { code: 0, message: 'success', data: { detail: convert(data), parents: (data.parents || []).map(convert), children: (data.children || []).map(convert) } } as ApiResult<TraceNodeDetail>
+  }).then((response: AxiosResponse<ApiResult<RawTraceNode>>) => {
+    const raw = response.data.data!
+    const convert = (n: RawTraceNode): TraceNode => ({ id: n.id, nodeType: n.nodeType, nodeCode: n.barcode, name: n.name, productCode: n.productCode ?? undefined, specification: n.specification ?? undefined, materialCode: n.materialCode ?? undefined, materialBatchNo: n.materialBatchNo ?? undefined, parentId: null, children: (n.children || []).map(convert), batchInfo: n.materialBatchNo ? { batchNo: n.materialBatchNo, materialCode: n.materialCode ?? undefined, materialName: n.name } : null })
+    const detail = convert(raw)
+    return { code: 0, message: 'success', data: { detail, children: detail.children || [] } } as ApiResult<TraceNodeDetail>
   })
-}
-
-/** 快捷绑定：将来料检验记录与成品检验记录关联到追溯图 */
-export function bindMaterialToFinishedGoodsApi(
-  materialInspectionId: number,
-  finishedGoodsInspectionId: number,
-): Promise<ApiResult<{
-  bound: boolean
-  message: string
-  finishedGoodsNodeId: number
-  finishedGoodsSn: string
-  finishedGoodsName: string
-  materialNodeId: number
-  materialBatchNo: string
-  materialName: string
-  relationParentId: number
-  relationChildId: number
-}>> {
-  return axios.post(`${incomingTraceBase}/bind`, {
-    materialInspectionId,
-    finishedGoodsInspectionId,
-  }, {
-    headers: { Authorization: `Bearer ${sessionStorage.getItem('qms_token') || ''}` },
-  }).then(r => r.data)
 }

@@ -134,7 +134,7 @@ import {
 
 const props = defineProps<{
   visible: boolean
-  nodeId: number | null
+  nodeId: string | null
 }>()
 const emit = defineEmits<{
   'update:visible': [v: boolean]
@@ -166,11 +166,19 @@ function iqcColor(status: string): string {
   return IQC_STATUS_COLORS[status] ?? '#8C9BA8'
 }
 
-async function loadDetail(id: number) {
+async function loadDetail(nodeIdStr: string) {
   loading.value = true
   detail.value = null
   try {
-    const res = await getTraceNodeDetailApi(id)
+    // 解析复合 ID：格式 "fg_123" 或 "mi_456"
+    const parts = nodeIdStr.split('_')
+    const type = parts[0] as 'fg' | 'mi'
+    const id = parseInt(parts[1], 10)
+    if (!['fg', 'mi'].includes(type) || isNaN(id)) {
+      console.error('无法解析节点ID:', nodeIdStr)
+      return
+    }
+    const res = await getTraceNodeDetailApi(id, type)
     if (res.code === 0) detail.value = res.data
   } catch (e) {
     console.error('加载节点详情失败', e)

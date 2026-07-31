@@ -33,6 +33,8 @@ export interface MaterialInspection {
   supplierName?: string
   supplierCode?: string
   materialCode?: string
+  /** 仅列表展示：关联关键物料绑定清单得到的物料条码。 */
+  materialBarcode?: string
   materialName?: string
   specModel?: string
   materialBatchNo?: string
@@ -139,6 +141,23 @@ export interface MaterialInspectionImportResultVO {
   createdExceptionIds: number[]
 }
 
+/** 导入预览逐行失败明细 */
+export interface ImportPreviewFailItem {
+  rowIndex: number
+  recordNo: string
+  reason: string
+}
+
+/** 导入预览结果（解析并逐行校验，未落库） */
+export interface MaterialInspectionImportPreviewVO {
+  /** 可导入记录列表（确认后原样提交 /import） */
+  list: Partial<MaterialInspection>[]
+  /** 逐行失败明细，rowIndex 为 Excel 物理行号（从 1 开始） */
+  errors: ImportPreviewFailItem[]
+  validCount: number
+  totalCount: number
+}
+
 /** 物料检验批量导入请求 */
 export interface MaterialInspectionImportDTO {
   list: Partial<MaterialInspection>[]
@@ -158,6 +177,9 @@ export interface MaterialInspectionListParams extends PageParams {
   reviewStatus?: string
   inspectionResult?: string
   supplierCode?: string
+  materialCode?: string
+  /** 仅列表展示：关联关键物料绑定清单得到的物料条码。 */
+  materialBarcode?: string
   startDate?: string
   endDate?: string
 }

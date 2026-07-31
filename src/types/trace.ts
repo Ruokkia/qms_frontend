@@ -8,8 +8,8 @@ import type { NodeTypeEnum, IqcStatusEnum, InspectionResultEnum } from '@/enums/
 
 /** 追溯节点（对齐 m0-2 响应） */
 export interface TraceNode {
-  /** 节点ID */
-  id: number
+  /** 节点ID（复合字符串 "fg_123"/"mi_456" 或旧数字ID） */
+  id: string | number
   /** 节点类型：SN/部件/关键物料/非关键物料/来料批次/生产批次 */
   nodeType: string
   /** 节点编码（SN或物料码，唯一） */
@@ -25,7 +25,7 @@ export interface TraceNode {
   /** 物料批号（MATERIAL 类型专用） */
   materialBatchNo?: string
   /** 直接父级ID（NULL=根节点） */
-  parentId: number | null
+  parentId?: number | null
   /** 父级编码（连表填充，便于前端展示） */
   parentCode?: string | null
   /** 关联批次ID */

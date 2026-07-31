@@ -9,8 +9,6 @@
         </p>
       </div>
       <div class="header-right">
-        <button class="sample-btn" @click="openSampleData">示例数据</button>
-        <button class="entry-btn" @click="entryVisible = true">维护关联</button>
         <span class="header-tag">M0</span>
       </div>
     </header>
@@ -111,47 +109,6 @@
       v-model:visible="detailVisible"
       :node-id="detailNodeId"
     />
-    <el-drawer v-model="entryVisible" title="维护追溯关联" size="420px">
-      <el-form label-position="top">
-        <p class="relation-hint">成品、半成品和来料节点由各自的检验主数据自动同步；此处仅维护已有节点之间的父子关系。</p>
-        <el-form-item label="父节点 ID"><el-input v-model="relation.parentNodeId" placeholder="产品或半成品节点 ID"/></el-form-item>
-        <el-form-item label="子节点 ID"><el-input v-model="relation.childNodeId" placeholder="半成品或物料节点 ID"/></el-form-item>
-        <el-form-item label="数量"><el-input v-model="relation.quantity" placeholder="可选"/></el-form-item>
-        <el-button @click="saveRelation">保存关系</el-button>
-      </el-form>
-    </el-drawer>
-    <el-dialog v-model="sampleVisible" title="来料追溯示例数据" width="min(1180px, 94vw)" class="sample-dialog">
-      <p class="sample-note">数据直接读取当前追溯库，便于验收节点、绑定关系与批次覆盖范围。</p>
-      <el-tabs v-model="sampleTab" class="sample-tabs">
-        <el-tab-pane label="节点表（trace_node）" name="nodes">
-          <el-table :data="sampleNodes" max-height="430" stripe border v-loading="sampleLoading">
-            <el-table-column prop="id" label="ID" width="68" />
-            <el-table-column prop="nodeType" label="类型" width="130"><template #default="{ row }"><el-tag size="small" :type="nodeTagType(row.nodeType)">{{ nodeTypeText(row.nodeType) }}</el-tag></template></el-table-column>
-            <el-table-column prop="barcode" label="唯一条码" min-width="180" />
-            <el-table-column prop="name" label="名称" min-width="160" />
-            <el-table-column prop="materialCode" label="物料代码" min-width="130"><template #default="{ row }">{{ row.materialCode || '—' }}</template></el-table-column>
-            <el-table-column prop="materialBatchNo" label="物料批号" min-width="145"><template #default="{ row }">{{ row.materialBatchNo || '—' }}</template></el-table-column>
-          </el-table>
-        </el-tab-pane>
-        <el-tab-pane label="关系表（trace_relation）" name="relations">
-          <el-table :data="sampleRelations" max-height="430" stripe border v-loading="sampleLoading">
-            <el-table-column prop="id" label="ID" width="68" />
-            <el-table-column label="父节点（产品/半成品）" min-width="240"><template #default="{ row }"><b>{{ row.parentBarcode }}</b><br /><span class="table-muted">{{ row.parentName }} · #{{ row.parentNodeId }}</span></template></el-table-column>
-            <el-table-column label="子节点（半成品/物料）" min-width="240"><template #default="{ row }"><b>{{ row.childBarcode }}</b><br /><span class="table-muted">{{ row.childName }} · #{{ row.childNodeId }}</span></template></el-table-column>
-            <el-table-column prop="quantity" label="数量" width="92"><template #default="{ row }">{{ row.quantity ?? '—' }}</template></el-table-column>
-            <el-table-column prop="workOrderNo" label="工单" min-width="120"><template #default="{ row }">{{ row.workOrderNo || '—' }}</template></el-table-column>
-            <el-table-column prop="processName" label="工序" min-width="120"><template #default="{ row }">{{ row.processName || '—' }}</template></el-table-column>
-          </el-table>
-        </el-tab-pane>
-        <el-tab-pane label="物料批次表（汇总视图）" name="batches">
-          <el-table :data="sampleBatches" max-height="430" stripe border v-loading="sampleLoading">
-            <el-table-column prop="batchNo" label="物料批号" min-width="190" />
-            <el-table-column prop="materialCount" label="该批物料种类" width="130" />
-            <el-table-column prop="barcodes" label="物料条码" min-width="360" />
-          </el-table>
-        </el-tab-pane>
-      </el-tabs>
-    </el-dialog>
   </div>
 </template>
 
@@ -163,7 +120,6 @@ import { useAuthStore } from '@/stores/auth'
 import { traceQueryApi } from '@/api/trace'
 import { getErrorMessage } from '@/api/request-error'
 import axios from 'axios'
-import { ElMessage } from 'element-plus'
 import {
   TraceDirectionEnum,
   TRACE_DIRECTION_LABELS,
@@ -178,43 +134,6 @@ const incomingTraceBase = '/api/v2/incoming-trace'
 
 const auth = useAuthStore()
 const route = useRoute()
-const entryVisible = ref(false)
-const sampleVisible = ref(false)
-const sampleLoading = ref(false)
-const sampleTab = ref('nodes')
-const sampleNodes = ref<any[]>([])
-const sampleRelations = ref<any[]>([])
-const sampleBatches = computed(() => {
-  const buckets = new Map<string, any[]>()
-  sampleNodes.value.filter((node) => node.nodeType === 'MATERIAL' && node.materialBatchNo).forEach((node) => {
-    const items = buckets.get(node.materialBatchNo) || []
-    items.push(node)
-    buckets.set(node.materialBatchNo, items)
-  })
-  return [...buckets.entries()].map(([batchNo, items]) => ({ batchNo, materialCount: items.length, barcodes: items.map((item) => item.barcode).join('、') }))
-})
-function nodeTypeText(type: string) { return ({ FINISHED_GOOD: '成品', SEMI_FINISHED: '半成品', MATERIAL: '物料' } as Record<string, string>)[type] || type }
-function nodeTagType(type: string) { return ({ FINISHED_GOOD: 'primary', SEMI_FINISHED: 'success', MATERIAL: 'warning' } as Record<string, any>)[type] || 'info' }
-async function openSampleData() {
-  sampleVisible.value = true
-  sampleLoading.value = true
-  try {
-    const headers = { Authorization: `Bearer ${sessionStorage.getItem('qms_token') || ''}` }
-    const [nodes, relations] = await Promise.all([
-      axios.get(`${incomingTraceBase}/nodes`, { headers }),
-      axios.get(`${incomingTraceBase}/relations`, { headers }),
-    ])
-    sampleNodes.value = nodes.data.data || []
-    sampleRelations.value = relations.data.data || []
-  } catch (e: any) {
-    ElMessage.error(getErrorMessage(e, '示例数据加载失败，请确认后端已启动'))
-  } finally { sampleLoading.value = false }
-}
-const relation = ref({ parentNodeId: '', childNodeId: '', quantity: '' })
-async function saveRelation() {
-  try { await axios.post(`${incomingTraceBase}/relations`, relation.value, { headers: { Authorization: `Bearer ${sessionStorage.getItem('qms_token') || ''}` } }); ElMessage.success('关系已保存'); relation.value = { parentNodeId: '', childNodeId: '', quantity: '' } }
-  catch (e: any) { ElMessage.error(getErrorMessage(e, '关系保存失败，请检查节点 ID 和是否形成环路')) }
-}
 
 // ── 追溯查询 ────────────────────────────────────────────────
 const direction = ref<TraceDirectionEnum>(TraceDirectionEnum.FULL)
@@ -301,10 +220,10 @@ function collapseAll() {
 
 // ── 节点详情 ────────────────────────────────────────────────
 const detailVisible = ref(false)
-const detailNodeId = ref<number | null>(null)
+const detailNodeId = ref<string | null>(null)
 
-function openDetail(id: number) {
-  detailNodeId.value = id
+function openDetail(id: string | number) {
+  detailNodeId.value = String(id)
   detailVisible.value = true
 }
 
