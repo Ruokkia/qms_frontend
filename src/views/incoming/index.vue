@@ -31,16 +31,45 @@
       <div class="chart-card">
         <div class="card-header">
           <span class="card-title">重点供应商合格率趋势</span>
-          <span class="card-hint">近30天来料批次量 Top5 · 合格率对比</span>
+          <div style="display:flex; gap:8px; align-items:center">
+            <el-select v-model="trendTopN" size="small" style="width:90px" @change="loadKeySupplierTrend">
+              <el-option :value="5" label="Top 5" />
+              <el-option :value="10" label="Top 10" />
+              <el-option :value="20" label="Top 20" />
+            </el-select>
+            <el-date-picker
+              v-model="trendDateRange"
+              type="daterange"
+              range-separator="至"
+              start-placeholder="开始"
+              end-placeholder="结束"
+              value-format="YYYY-MM-DD"
+              size="small"
+              style="width:220px"
+              @change="loadKeySupplierTrend"
+            />
+          </div>
         </div>
+        <div style="color:#909399; font-size:11px; margin:-4px 0 4px 2px">默认 Top 5 · 近30天</div>
         <TrendChart :trend="keySupplierTrend" :loading="keyTrendLoading" />
       </div>
       <div class="chart-card">
         <div class="card-header">
           <span class="card-title">供应商合格率排名</span>
-          <span class="card-hint">按合格率升序，红色为重点关注</span>
+          <el-date-picker
+            v-model="rankDateRange"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="开始"
+            end-placeholder="结束"
+            value-format="YYYY-MM-DD"
+            size="small"
+            style="width:220px"
+            @change="loadSupplierRank"
+          />
         </div>
-        <SupplierRankChart :data="stats?.supplierRank || []" :loading="statsLoading" />
+        <div style="color:#909399; font-size:11px; margin:-4px 0 4px 2px">默认近30天 · 按合格率升序，红色为重点关注</div>
+        <SupplierRankChart :data="supplierRankData" :loading="rankLoading" />
       </div>
     </section>
 
@@ -223,6 +252,7 @@ import {
   getMaterialInspectionListApi,
   getMaterialInspectionStatsApi,
   getKeySupplierTrendApi,
+  getSupplierRankApi,
   getMaterialInspectionDetailApi,
   createMaterialInspectionApi,
   updateMaterialInspectionApi,
@@ -289,19 +319,48 @@ async function loadStats() {
   }
 }
 
-// ── 重点供应商趋势（近30天批次量 Top5） ──────────────────────
+// ── 重点供应商趋势 ──────────────────────
+function defaultDateRange(): [string, string] {
+  const end = new Date()
+  const start = new Date()
+  start.setDate(end.getDate() - 29)
+  const fmt = (d: Date) => d.toISOString().slice(0, 10)
+  return [fmt(start), fmt(end)]
+}
+
 const keyTrendLoading = ref(false)
 const keySupplierTrend = ref<KeySupplierTrend | null>(null)
+const trendTopN = ref(5)
+const trendDateRange = ref<[string, string]>(defaultDateRange())
 
 async function loadKeySupplierTrend() {
   keyTrendLoading.value = true
   try {
-    const res = await getKeySupplierTrendApi()
+    const [startDate, endDate] = trendDateRange.value
+    const res = await getKeySupplierTrendApi(trendTopN.value, startDate, endDate)
     if (res.code === 0) keySupplierTrend.value = res.data
   } catch (e) {
     console.error('加载重点供应商趋势失败', e)
   } finally {
     keyTrendLoading.value = false
+  }
+}
+
+// ── 供应商合格率排名（独立接口） ──────────────────────
+const rankLoading = ref(false)
+const supplierRankData = ref<any[]>([])
+const rankDateRange = ref<[string, string]>(defaultDateRange())
+
+async function loadSupplierRank() {
+  rankLoading.value = true
+  try {
+    const [startDate, endDate] = rankDateRange.value
+    const res = await getSupplierRankApi(startDate, endDate)
+    if (res.code === 0) supplierRankData.value = res.data || []
+  } catch (e) {
+    console.error('加载供应商排名失败', e)
+  } finally {
+    rankLoading.value = false
   }
 }
 
@@ -462,6 +521,7 @@ async function onDetailSaved(data: Partial<MaterialInspection>) {
         detailVisible.value = false
         loadStats()
         loadList()
+        loadSupplierRank()
       }
     } else {
       // 更新
@@ -471,6 +531,7 @@ async function onDetailSaved(data: Partial<MaterialInspection>) {
         detailVisible.value = false
         loadStats()
         loadList()
+        loadSupplierRank()
       }
     }
   } catch (e: any) {
@@ -493,6 +554,7 @@ async function deleteRecord(id: number) {
       ElMessage.success('删除成功')
       loadStats()
       loadList()
+      loadSupplierRank()
     }
   } catch (e: any) {
     if (e === 'cancel') return
@@ -528,6 +590,7 @@ async function doReconcile() {
       ElMessage.success(`对账完成，新建 ${res.data.createdCount} 个异常单`)
       loadStats()
       loadList()
+      loadSupplierRank()
     }
   } catch (e) {
     console.error('对账失败', e)
@@ -547,6 +610,7 @@ function openImport() {
 function onImported() {
   loadStats()
   loadList()
+  loadSupplierRank()
 }
 
 // ── 分公司切换刷新 ───────────────────────────────────────────
@@ -556,12 +620,14 @@ watch(
     loadStats()
     loadList()
     loadKeySupplierTrend()
+    loadSupplierRank()
   },
 )
 
 loadStats()
 loadList()
 loadKeySupplierTrend()
+loadSupplierRank()
 </script>
 
 <style scoped>

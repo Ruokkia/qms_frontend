@@ -10,8 +10,13 @@ import type { KeySupplierTrend } from '@/types/incoming'
 
 const props = defineProps<{ trend: KeySupplierTrend | null; loading?: boolean }>()
 
-// 企业色板：区分 Top5 供应商
-const COLORS = ['#1B3A5B', '#B8763E', '#3E7A4E', '#5B7A99', '#B84B3E']
+// 企业色板：区分 TopN 供应商（最多20色循环）
+const COLORS = [
+  '#1B3A5B', '#B8763E', '#3E7A4E', '#5B7A99', '#B84B3E',
+  '#6B4C8A', '#2E8B8B', '#C4883C', '#7B6B4E', '#4A7A2E',
+  '#9B4D6A', '#3B6B9B', '#8B6B3E', '#5E3A7A', '#2B7B5B',
+  '#A05B3B', '#4B5B8B', '#7A3B3B', '#3B8B6B', '#6B5B2B',
+]
 
 const chartRef = ref<HTMLDivElement | null>(null)
 let chart: echarts.ECharts | null = null
@@ -98,7 +103,7 @@ function render() {
       itemHeight: 8,
       textStyle: { color: '#8C9BA8', fontSize: 11 },
     },
-  })
+  }, { notMerge: true })
 }
 
 watch(() => props.trend, render, { deep: true })

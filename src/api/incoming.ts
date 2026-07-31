@@ -16,6 +16,7 @@ import type {
   MaterialInspectionImportPreviewVO,
   MaterialInspectionReconcileResultVO,
   KeySupplierTrend,
+  SupplierRankItem,
 } from '@/types/incoming'
 
 
@@ -84,9 +85,18 @@ export function getMaterialInspectionStatsApi(): Promise<ApiResult<MaterialInspe
   return apiGet<MaterialInspectionStats>(`${BASE}/stats`)
 }
 
-/** 重点供应商质量趋势（近30天来料批次量 Top5） */
-export function getKeySupplierTrendApi(): Promise<ApiResult<KeySupplierTrend>> {
-  return apiGet<KeySupplierTrend>(`${BASE}/key-supplier-trend`)
+/** 重点供应商质量趋势（自定义时间范围内来料批次量 TopN） */
+export function getKeySupplierTrendApi(topN?: number, startDate?: string, endDate?: string): Promise<ApiResult<KeySupplierTrend>> {
+  return apiGet<KeySupplierTrend>(`${BASE}/key-supplier-trend`, {
+    params: { topN, startDate, endDate },
+  })
+}
+
+/** 供应商合格率排名（可选时间范围） */
+export function getSupplierRankApi(startDate?: string, endDate?: string): Promise<ApiResult<SupplierRankItem[]>> {
+  return apiGet<SupplierRankItem[]>(`${BASE}/supplier-rank`, {
+    params: { startDate, endDate },
+  })
 }
 
 /** 物料检验详情 */
