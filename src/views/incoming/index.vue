@@ -124,43 +124,37 @@
         :data="pageList"
         v-loading="listLoading"
         stripe
-        style="width: 100%"
         class="incoming-table"
         :row-class-name="rowClassName"
       >
-        <el-table-column prop="recordNo" label="记录编号" width="170" />
-        <el-table-column prop="inspectionDate" label="检验日期" width="110" />
-        <el-table-column label="供应商" min-width="140">
+        <el-table-column label="物料/批次" min-width="160">
           <template #default="{ row }">
-            <div class="cell-main">{{ row.supplierName }}</div>
-            <div class="cell-sub">{{ row.supplierCode }}</div>
+            <div class="cell-main">{{ row.materialName || '-' }}</div>
+            <div class="cell-sub">{{ row.materialBatchNo || '-' }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="物料/批次" min-width="180">
+        <el-table-column label="物料条码" min-width="140">
           <template #default="{ row }">
-            <div class="cell-main">{{ row.materialName }}</div>
-            <div class="cell-sub">{{ row.materialBatchNo }}</div>
+            <span style="font-family:'JetBrains Mono',monospace; font-size:12px">{{ row.materialBarcode || '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="submittedQty" label="送检数" width="90" align="right" />
-        <el-table-column prop="qualifiedQty" label="合格数" width="90" align="right" />
-        <el-table-column prop="unqualifiedQty" label="不良数" width="90" align="right" />
+        <el-table-column label="供应商" min-width="130">
+          <template #default="{ row }">
+            <div class="cell-main">{{ row.supplierName || '-' }}</div>
+            <div class="cell-sub">{{ row.supplierCode || '-' }}</div>
+          </template>
+        </el-table-column>
         <el-table-column label="检验结果" width="90" align="center">
           <template #default="{ row }">
             <span class="status-dot" :style="{ background: resultColor(row.inspectionResult) }"></span>
             {{ row.inspectionResult }}
           </template>
         </el-table-column>
-        <el-table-column label="审核状态" width="90" align="center">
-          <template #default="{ row }">
-            <span class="status-badge" :style="reviewStyle(row.reviewStatus)">{{ row.reviewStatus }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="inspector" label="检验员" width="90" />
-        <el-table-column label="操作" width="280" align="center" fixed="right">
+        <el-table-column prop="inspectionDate" label="检验日期" width="105" align="center" />
+        <el-table-column label="操作" width="260" align="center" fixed="right">
           <template #default="{ row }">
             <button class="text-btn" @click="openDetail(row.id)">详情</button>
-            <button class="text-btn text-btn-trace" @click="openTrace(row)">??</button>
+            <button class="text-btn text-btn-trace" @click="openTrace(row)">&#36861;&#28335;</button>
             <button class="text-btn" style="margin-left:4px" @click="openEdit(row.id)">编辑</button>
             <button class="text-btn text-btn-danger" style="margin-left:4px" @click="deleteRecord(row.id)">删除</button>
             <button
@@ -239,7 +233,6 @@ import {
   getExceptionBySourceIdApi,
   createExceptionFromInspectionApi,
 } from '@/api/exception'
-import { resolveTraceRootBarcodeApi } from '@/api/trace'
 import type {
   MaterialInspection,
   MaterialInspectionStats,
@@ -258,17 +251,12 @@ const route = useRoute()
 const router = useRouter()
 
 
-async function openTrace(row: MaterialInspection) {
-  try {
-    const res = await resolveTraceRootBarcodeApi('MATERIAL', row.id)
-    if (res.code !== 0 || !res.data) {
-      ElMessage.error(res.message || '????????????')
-      return
-    }
-    await router.push({ path: '/trace', query: { code: res.data, direction: 'full' } })
-  } catch (e: any) {
-    ElMessage.error(getErrorMessage(e, '??????'))
+function openTrace(row: MaterialInspection) {
+  if (!row.materialBarcode) {
+    ElMessage.warning('该来料记录无物料条码，无法追溯')
+    return
   }
+  router.push({ path: '/trace', query: { code: row.materialBarcode, direction: 'full' } })
 }
 // ── KPI 看板 ────────────────────────────────────────────────
 const statsLoading = ref(false)
@@ -321,7 +309,7 @@ async function loadKeySupplierTrend() {
 const dateRange = ref<[string, string] | null>(null)
 const query = reactive({
   page: 1,
-  size: 20,
+  size: 10,
   keyword: '',
   reviewStatus: '',
   inspectionResult: '',
@@ -330,6 +318,7 @@ const query = reactive({
 const listLoading = ref(false)
 const pageList = ref<MaterialInspection[]>([])
 const pageTotal = ref(0)
+
 
 async function loadList() {
   listLoading.value = true
@@ -347,7 +336,8 @@ async function loadList() {
     }
     const res = await getMaterialInspectionListApi(params)
     if (res.code === 0) {
-      pageList.value = res.data.list
+      const records = res.data.list || []
+      pageList.value = records
       pageTotal.value = res.data.total
     }
   } catch (e) {
@@ -359,7 +349,7 @@ async function loadList() {
 
 function resetFilter() {
   query.page = 1
-  query.size = 20
+  query.size = 10
   query.keyword = ''
   query.reviewStatus = ''
   query.inspectionResult = ''
@@ -768,7 +758,7 @@ loadKeySupplierTrend()
 }
 .incoming-table :deep(.cell-sub) {
   font-size: 11px;
-  color: #b8b3ac;
+  color: #8b8680;
   margin-top: 2px;
   font-family: 'JetBrains Mono', monospace;
 }

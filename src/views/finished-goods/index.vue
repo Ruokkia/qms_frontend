@@ -66,8 +66,6 @@
         style="width: 100%"
         :default-sort="{ prop: 'id', order: 'descending' }"
       >
-        <el-table-column prop="id" label="ID" width="70" align="center" sortable="custom" />
-        <el-table-column prop="reportNo" label="报告编号" width="160" show-overflow-tooltip />
         <el-table-column prop="productName" label="产品名称" min-width="140" show-overflow-tooltip />
         <el-table-column prop="category" label="产品分类" width="100" align="center">
           <template #default="{ row }">
@@ -83,28 +81,14 @@
             <span class="status-badge" :style="resultStyle(row.inspectionResult)">{{ row.inspectionResult || '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="qcReview" label="品管审核" width="90" align="center">
-          <template #default="{ row }">
-            <span class="status-badge" :style="reviewStyle(row.qcReview)">{{ row.qcReview || '-' }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="mgrApproval" label="管代批准" width="90" align="center">
-          <template #default="{ row }">
-            <span class="status-badge" :style="reviewStyle(row.mgrApproval)">{{ row.mgrApproval || '-' }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="productionOrderNo" label="生产订单号" width="140" show-overflow-tooltip />
-        <el-table-column prop="inspectorName" label="检验名字" width="100" />
-        <el-table-column prop="qualifiedQty" label="合格数量" width="100" align="right" />
-        <el-table-column prop="unqualifiedQty" label="不合格数量" width="100" align="right" />
-        <el-table-column prop="createdAt" label="创建时间" width="160" />
+        <el-table-column prop="expiryDate" label="过期日期" width="110" align="center" />
         <el-table-column label="操作" width="280" align="center" fixed="right">
           <template #default="{ row }">
             <button class="text-btn" @click="openDetail(row.id)">详情</button>
             <button class="text-btn" style="margin-left:4px" @click="openEdit(row.id)">编辑</button>
-            <button class="text-btn text-btn-trace" style="margin-left:4px" @click="openTrace(row)">??</button>
+            <button class="text-btn text-btn-trace" style="margin-left:4px" @click="openTrace(row)">&#36861;&#28335;</button>
             <button class="text-btn text-btn-danger" style="margin-left:4px" @click="deleteRecord(row.id)">删除</button>
-            <button class="text-btn text-btn-bind" style="margin-left:4px" @click="openBind(row)">绑定来料</button>
+            <button class="text-btn text-btn-bind" style="margin-left:4px" @click="openBind(row)">绑定子类</button>
           </template>
         </el-table-column>
       </el-table>
@@ -130,92 +114,78 @@
       @saved="onDetailSaved"
     />
 
-    <!-- 绑定来料弹窗 -->
-    <el-dialog v-model="bindVisible" title="绑定来料追溯" width="520px" :close-on-click-modal="false" destroy-on-close>
+    <!-- 绑定子项弹窗（新架构：写入 critical_material_binding） -->
+    <el-dialog v-model="bindVisible" title="绑定子项" width="640px" :close-on-click-modal="false" destroy-on-close>
       <div v-if="bindFg" class="bind-body">
-        <!-- 当前成品信息 -->
+        <!-- 当前产品信息 -->
         <div class="bind-card">
-          <div class="bind-card-title">当前成品记录</div>
+          <div class="bind-card-title">当前产品：{{ bindFg.productName || '-' }} <span class="font-mono" style="color:#8492a6">{{ bindFg.prodBatchOrSn }}</span></div>
+        </div>
+
+        <!-- 子类分类选择 -->
+        <div class="bind-card" style="margin-top:12px">
+          <div class="bind-card-title">子类分类</div>
+          <el-radio-group v-model="bindCategory" @change="onCategoryChange" style="margin-top:4px">
+            <el-radio label="半成品">半成品</el-radio>
+            <el-radio label="物料">物料</el-radio>
+          </el-radio-group>
+        </div>
+
+        <!-- 搜索框（条码 + 名称双框，均可为空，都填则 AND 模糊查询） -->
+        <div class="bind-card" style="margin-top:12px">
+          <div style="color:#909399; font-size:12px; margin-bottom:6px">模糊搜索，选填（至少填一项）</div>
+          <div style="display:flex; gap:8px; align-items:center">
+            <el-input v-model="bindBarcodeKeyword" placeholder="条码" clearable @keyup.enter="doSearchChildren" style="flex:1" />
+            <el-input v-model="bindNameKeyword" placeholder="名称" clearable @keyup.enter="doSearchChildren" style="flex:1" />
+            <el-button type="primary" :loading="queryingChildren" @click="doSearchChildren">搜索</el-button>
+          </div>
+        </div>
+
+        <!-- 搜索结果列表 -->
+        <div class="bind-card" style="margin-top:12px" v-if="childrenResults.length > 0 || hasSearched">
+          <el-table :data="childrenResults" highlight-current-row @current-change="onChildSelect" size="small" style="width:100%">
+            <el-table-column prop="barcode" label="条码" width="160" />
+            <el-table-column prop="name" label="名称" min-width="120" />
+            <el-table-column prop="specModel" label="规格型号" width="120" />
+            <el-table-column label="检验结果" width="80" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="row.inspectionResult" :type="row.inspectionResult === '合格' ? 'success' : 'danger'" size="small">{{ row.inspectionResult }}</el-tag>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div class="pagination-wrap" style="margin-top:8px">
+            <el-pagination
+              v-model:current-page="childrenPage"
+              :page-size="10"
+              :total="childrenTotal"
+              layout="total, prev, pager, next"
+              @current-change="doSearchChildren"
+            />
+          </div>
+        </div>
+
+        <!-- 已选子项信息 -->
+        <div v-if="selectedChild" class="bind-card bind-card-success" style="margin-top:12px">
+          <div class="bind-card-title">已选子项</div>
           <el-descriptions :column="2" border size="small">
-            <el-descriptions-item label="ID">{{ bindFg.id }}</el-descriptions-item>
-            <el-descriptions-item label="产品名称">{{ bindFg.productName || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="生产批号/产品编号" :span="2">
-              <span class="font-mono">{{ bindFg.prodBatchOrSn || '-' }}</span>
-            </el-descriptions-item>
-            <el-descriptions-item label="报告编号">{{ bindFg.reportNo || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="物料编码">{{ bindFg.materialCode || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="条码"><span class="font-mono">{{ selectedChild.barcode }}</span></el-descriptions-item>
+            <el-descriptions-item label="名称">{{ selectedChild.name }}</el-descriptions-item>
+            <el-descriptions-item label="规格型号">{{ selectedChild.specModel || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="分类">{{ bindCategory }}</el-descriptions-item>
           </el-descriptions>
         </div>
 
-        <!-- 选择来料 -->
-        <div class="bind-card" style="margin-top:14px">
-          <div class="bind-card-title">选择来料记录</div>
-          <el-select
-            v-model="bindInput.matId"
-            filterable
-            remote
-            reserve-keyword
-            clearable
-            placeholder="输入物料编码/批号/记录号/供应商检索来料记录"
-            :remote-method="searchMaterial"
-            :loading="queryingMat"
-            style="width: 100%"
-            @change="onMaterialSelect"
-          >
-            <el-option
-              v-for="opt in materialOptions"
-              :key="opt.id"
-              :label="`${opt.recordNo}（${opt.materialCode} / ${opt.materialBatchNo}）`"
-              :value="opt.id"
-            >
-              <div style="display:flex; justify-content:space-between; gap:12px">
-                <span>{{ opt.recordNo }}</span>
-                <span style="color:#8492a6; font-size:12px">
-                  {{ opt.materialCode }} / {{ opt.materialBatchNo }} / {{ opt.supplierName }} / {{ opt.inspectionResult }}
-                </span>
-              </div>
-            </el-option>
-          </el-select>
-
-          <!-- 来料信息展示 -->
-          <div v-if="bindMat" class="bind-mat-info">
-            <el-descriptions :column="2" border size="small">
-              <el-descriptions-item label="物料批号">
-                <span class="font-mono">{{ bindMat.materialBatchNo || '-' }}</span>
-              </el-descriptions-item>
-              <el-descriptions-item label="物料名称">{{ bindMat.materialName || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="物料编码">{{ bindMat.materialCode || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="供应商">{{ bindMat.supplierName || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="检验结果">
-                <el-tag
-                  :type="bindMat.inspectionResult === '合格' ? 'success' : bindMat.inspectionResult === '不合格' ? 'danger' : 'info'"
-                  size="small"
-                >{{ bindMat.inspectionResult || '-' }}</el-tag>
-              </el-descriptions-item>
-              <el-descriptions-item label="送检数量">{{ bindMat.submittedQty ?? '-' }}</el-descriptions-item>
-            </el-descriptions>
-          </div>
-        </div>
-
         <!-- 绑定结果 -->
-        <div v-if="bindResult" class="bind-card" :class="bindResult.bound ? 'bind-card-success' : 'bind-card-warn'" style="margin-top:14px">
-          <div class="bind-card-title">{{ bindResult.bound ? '绑定成功' : '提示' }}</div>
-          <p class="bind-msg">{{ bindResult.message }}</p>
-          <div v-if="bindResult.bound">
-            <el-descriptions :column="2" border size="small">
-              <el-descriptions-item label="成品节点 ID">{{ bindResult.finishedGoodsNodeId }}</el-descriptions-item>
-              <el-descriptions-item label="来料节点 ID">{{ bindResult.materialNodeId }}</el-descriptions-item>
-              <el-descriptions-item label="成品批号">{{ bindResult.finishedGoodsSn }}</el-descriptions-item>
-              <el-descriptions-item label="物料批号">{{ bindResult.materialBatchNo }}</el-descriptions-item>
-            </el-descriptions>
-          </div>
+        <div v-if="bindResultMsg" class="bind-card" :class="bindSuccess ? 'bind-card-success' : 'bind-card-warn'" style="margin-top:12px">
+          <p class="bind-msg">{{ bindResultMsg }}</p>
         </div>
       </div>
 
       <template #footer>
-        <el-button @click="bindVisible = false; bindResult = null">关闭</el-button>
+        <el-button @click="bindVisible = false; bindResultMsg = null">关闭</el-button>
         <el-button
-          v-if="bindMat && !bindResult?.bound"
+          v-if="selectedChild && !bindSuccess"
           type="primary"
           :loading="binding"
           @click="doBind"
@@ -238,8 +208,8 @@ import {
   updateFinishedGoodsApi,
   deleteFinishedGoodsApi,
 } from '@/api/finishedGoods'
-import { bindMaterialToFinishedGoodsApi, resolveTraceRootBarcodeApi } from '@/api/trace'
-import { getMaterialInspectionListApi } from '@/api/incoming'
+import { getMaterialInspectionListApi, searchChildrenApi, createBindingApi } from '@/api/incoming'
+import type { SearchChildrenItem } from '@/api/incoming'
 import { getErrorMessage, isErrorNotified } from '@/api/request-error'
 import type { FinishedGoodsInspection, FinishedGoodsListParams } from '@/types/finishedGoods'
 import type { MaterialInspection, MaterialInspectionListParams } from '@/types/incoming'
@@ -256,7 +226,7 @@ const filters = reactive<FinishedGoodsListParams & { dateRange?: [string, string
   endDate: '',
   dateRange: null,
   page: 1,
-  size: 20,
+  size: 10,
 })
 const router = useRouter()
 
@@ -275,7 +245,7 @@ function resetFilters() {
   filters.endDate = ''
   filters.dateRange = null
   filters.page = 1
-  filters.size = 20
+  filters.size = 10
   loadList()
 }
 
@@ -326,17 +296,12 @@ const detailVisible = ref(false)
 const detail = ref<FinishedGoodsInspection | null>(null)
 const detailEditMode = ref(false)
 
-async function openTrace(row: FinishedGoodsInspection) {
-  try {
-    const res = await resolveTraceRootBarcodeApi('FINISHED_GOODS', row.id)
-    if (res.code !== 0 || !res.data) {
-      ElMessage.error(res.message || 'Trace node is unavailable')
-      return
-    }
-    await router.push({ path: '/trace', query: { code: res.data, direction: 'full' } })
-  } catch (e: any) {
-    ElMessage.error(getErrorMessage(e, 'Trace navigation failed'))
+function openTrace(row: FinishedGoodsInspection) {
+  if (!row.prodBatchOrSn) {
+    ElMessage.warning('该成品记录无产品批号/SN，无法追溯')
+    return
   }
+  router.push({ path: '/trace', query: { code: row.prodBatchOrSn, direction: 'full' } })
 }
 async function openDetail(id: number) {
   try {
@@ -412,68 +377,105 @@ async function deleteRecord(id: number) {
   }
 }
 
-// ── 绑定来料追溯 ──────────────────────────────────────────────
+// ── 绑定子项（新架构：写入 critical_material_binding） ────────
 const bindVisible = ref(false)
 const bindFg = ref<FinishedGoodsInspection | null>(null)
-const bindMat = ref<MaterialInspection | null>(null)
-const bindInput = reactive({ matId: null as number | null })
-const bindResult = ref<{ bound: boolean; message: string; finishedGoodsNodeId?: number; finishedGoodsSn?: string; materialNodeId?: number; materialBatchNo?: string } | null>(null)
-const queryingMat = ref(false)
+const bindCategory = ref<'半成品' | '物料'>('物料')
+const bindBarcodeKeyword = ref('')
+const bindNameKeyword = ref('')
+const bindResultMsg = ref<string | null>(null)
+const bindSuccess = ref(false)
+const queryingChildren = ref(false)
 const binding = ref(false)
-const materialOptions = ref<MaterialInspection[]>([])
+const childrenResults = ref<SearchChildrenItem[]>([])
+const childrenTotal = ref(0)
+const childrenPage = ref(1)
+const hasSearched = ref(false)
+const selectedChild = ref<SearchChildrenItem | null>(null)
 
 function openBind(row: FinishedGoodsInspection) {
   bindFg.value = row
-  bindMat.value = null
-  bindInput.matId = null
-  materialOptions.value = []
-  bindResult.value = null
+  bindCategory.value = '物料'
+  bindBarcodeKeyword.value = ''
+  bindNameKeyword.value = ''
+  childrenResults.value = []
+  childrenTotal.value = 0
+  childrenPage.value = 1
+  hasSearched.value = false
+  selectedChild.value = null
+  bindResultMsg.value = null
+  bindSuccess.value = false
   bindVisible.value = true
-  // 预载同物料的来料记录，方便直接选择
-  if (row.materialCode) searchMaterial('')
 }
 
-async function searchMaterial(query: string) {
-  queryingMat.value = true
+function onCategoryChange() {
+  childrenResults.value = []
+  childrenTotal.value = 0
+  childrenPage.value = 1
+  hasSearched.value = false
+  selectedChild.value = null
+  bindResultMsg.value = null
+  bindSuccess.value = false
+}
+
+async function doSearchChildren() {
+  const bk = bindBarcodeKeyword.value.trim()
+  const nk = bindNameKeyword.value.trim()
+  if (!bk && !nk) return
+  queryingChildren.value = true
+  hasSearched.value = true
   try {
-    const params: MaterialInspectionListParams = {
-      page: 1,
-      size: 20,
-      keyword: query || undefined,
-      materialCode: bindFg.value?.materialCode || undefined,
-    }
-    const res = await getMaterialInspectionListApi(params)
+    const res = await searchChildrenApi({
+      category: bindCategory.value,
+      barcodeKeyword: bk || undefined,
+      nameKeyword: nk || undefined,
+      page: childrenPage.value,
+      size: 10,
+    })
     if (res.code === 0 && res.data) {
-      materialOptions.value = res.data.list || []
+      childrenResults.value = res.data.list || []
+      childrenTotal.value = res.data.total || 0
     } else {
-      materialOptions.value = []
+      childrenResults.value = []
+      childrenTotal.value = 0
     }
   } catch (e: any) {
     if (!isErrorNotified(e)) ElMessage.error(`查询失败：${getErrorMessage(e)}`)
   } finally {
-    queryingMat.value = false
+    queryingChildren.value = false
   }
 }
 
-function onMaterialSelect(id: number) {
-  bindMat.value = materialOptions.value.find((o) => o.id === id) || null
+function onChildSelect(row: SearchChildrenItem | null) {
+  selectedChild.value = row
+  bindResultMsg.value = null
+  bindSuccess.value = false
 }
 
 async function doBind() {
-  if (!bindFg.value || !bindInput.matId) return
+  if (!bindFg.value || !selectedChild.value) return
   binding.value = true
   try {
-    const res = await bindMaterialToFinishedGoodsApi(bindInput.matId, bindFg.value.id)
+    const res = await createBindingApi({
+      category: bindCategory.value,
+      productBarcode: bindFg.value.prodBatchOrSn || '',
+      productName: bindFg.value.productName,
+      productMaterialNo: bindFg.value.materialCode,
+      materialBarcode: selectedChild.value.barcode,
+      materialCode: selectedChild.value.materialCode,
+      materialName: selectedChild.value.name,
+      specModel: selectedChild.value.specModel,
+    })
     if (res.code === 0) {
-      bindResult.value = res.data
-      if (res.data.bound) {
-        ElMessage.success('绑定成功！')
-      } else {
-        ElMessage.warning(res.data.message)
-      }
+      bindSuccess.value = true
+      bindResultMsg.value = '绑定成功！'
+      ElMessage.success('绑定成功！')
     }
   } catch (e: any) {
-    if (!isErrorNotified(e)) ElMessage.error(`绑定失败：${getErrorMessage(e)}`)
+    if (!isErrorNotified(e)) {
+      bindSuccess.value = false
+      bindResultMsg.value = `绑定失败：${getErrorMessage(e)}`
+    }
   } finally {
     binding.value = false
   }
