@@ -3,21 +3,29 @@
 </template>
 
 <script setup lang="ts">
-// ===== M1: 供应商合格率排名图 =====
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import * as echarts from 'echarts'
 import type { SupplierRankItem } from '@/types/incoming'
+import { buildSupplierRateRanges, toRate, type SupplierRateRangeGroup } from './supplierRankRange'
 
 const props = defineProps<{ data: SupplierRankItem[]; loading?: boolean }>()
+const emit = defineEmits<{
+  'range-click': [payload: { range: string; items: SupplierRankItem[] }]
+}>()
 
 const chartRef = ref<HTMLDivElement | null>(null)
 let chart: echarts.ECharts | null = null
+let groups: SupplierRateRangeGroup[] = []
 
 function initChart() {
   if (!chartRef.value) return
   chart = echarts.init(chartRef.value)
   render()
   window.addEventListener('resize', handleResize)
+  chart.on('click', (params: any) => {
+    const group = groups[params.dataIndex]
+    if (group) emit('range-click', { range: group.label, items: group.items })
+  })
 }
 
 function handleResize() {
@@ -26,75 +34,64 @@ function handleResize() {
 
 function render() {
   if (!chart) return
-  const sorted = [...props.data].sort((a, b) => a.passRate - b.passRate)
-  const names = sorted.map((d) => d.supplierName)
-  const rates = sorted.map((d) => d.passRate)
-  const totals = sorted.map((d) => d.totalBatches)
+  groups = buildSupplierRateRanges(props.data)
+  chart.showLoading({
+    text: '加载中',
+    color: '#5E8C9F',
+    textColor: '#8C9BA8',
+    maskColor: 'rgba(255,255,255,0.7)',
+  })
+  if (!props.loading) chart.hideLoading()
 
+  const seriesData = groups.map((group) => {
+    const averageRate = group.items.reduce((sum, item) => sum + toRate(item.passRate), 0) / group.items.length
+    return {
+      name: group.label,
+      value: group.items.length,
+      itemStyle: { color: group.color },
+      averageRate,
+    }
+  })
   chart.setOption({
     tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'shadow' },
+      trigger: 'item',
       formatter: (params: any) => {
-        const idx = params[0].dataIndex
-        const item = sorted[idx]
-        return `<div style="font-size:12px">
-          <div style="font-weight:600;margin-bottom:4px">${item.supplierName}</div>
-          <div>合格率: <b>${item.passRate}%</b></div>
-          <div>总批次: <b>${item.totalBatches}</b></div>
-        </div>`
+        const group = groups[params.dataIndex]
+        const averageRate = group?.items.length
+          ? group.items.reduce((sum, item) => sum + toRate(item.passRate), 0) / group.items.length
+          : 0
+        return `<div style="font-size:12px"><div style="font-weight:600;margin-bottom:4px">${params.name}</div><div>供应商数量：<b>${params.value}</b></div><div>平均合格率：<b>${averageRate.toFixed(2)}%</b></div><div style="color:#909399;margin-top:4px">点击查看明细</div></div>`
       },
     },
-    grid: { left: 88, right: 48, top: 16, bottom: 16 },
-    xAxis: {
-      type: 'value',
-      min: 80,
-      max: 100,
-      axisLine: { show: false },
-      splitLine: { lineStyle: { color: '#F0EDE9' } },
-      axisLabel: { color: '#8C9BA8', fontSize: 11, formatter: '{value}%' },
+    legend: {
+      type: 'scroll',
+      bottom: 0,
+      left: 'center',
+      itemWidth: 10,
+      itemHeight: 10,
+      textStyle: { color: '#5B6770', fontSize: 11 },
     },
-    yAxis: {
-      type: 'category',
-      data: names,
-      axisLine: { lineStyle: { color: '#E3E0DC' } },
-      axisLabel: { color: '#5B6770', fontSize: 12 },
-      axisTick: { show: false },
+    series: [{
+      name: '供应商合格率分布',
+      type: 'pie',
+      radius: ['43%', '72%'],
+      center: ['50%', '45%'],
+      avoidLabelOverlap: true,
+      itemStyle: { borderColor: '#fff', borderWidth: 3 },
+      label: { formatter: '{b}\n{c}家', color: '#5B6770', fontSize: 11 },
+      labelLine: { length: 10, length2: 8 },
+      data: seriesData,
+    }],
+    graphic: {
+      type: 'text',
+      left: 'center',
+      top: '39%',
+      style: { text: '供应商\n合格率分布', textAlign: 'center', fill: '#5B6770', fontSize: 14, fontWeight: 600, lineHeight: 21 },
     },
-    series: [
-      {
-        name: '合格率',
-        type: 'bar',
-        data: rates.map((v) => ({
-          value: v,
-          itemStyle: {
-            color:
-              v >= 98
-                ? '#3E7A4E'
-                : v >= 95
-                  ? '#1B3A5B'
-                  : v >= 90
-                    ? '#B8763E'
-                    : '#B84B3E',
-            borderRadius: [0, 4, 4, 0],
-          },
-        })),
-        barMaxWidth: 18,
-        label: {
-          show: true,
-          position: 'right',
-          formatter: '{c}%',
-          color: '#5B6770',
-          fontSize: 11,
-          fontWeight: 600,
-        },
-      },
-    ],
-  })
+  }, true)
 }
 
-watch(() => props.data, render, { deep: true })
-
+watch(() => [props.data, props.loading], render, { deep: true })
 onMounted(initChart)
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
@@ -106,6 +103,6 @@ onUnmounted(() => {
 .rank-chart {
   width: 100%;
   height: 100%;
-  min-height: 280px;
+  min-height: 300px;
 }
 </style>

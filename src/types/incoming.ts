@@ -87,6 +87,9 @@ export interface SupplierRankItem {
   supplierCode: string
   totalBatches: number
   passRate: number
+  qualifiedBatches?: number
+  unqualifiedBatches?: number
+  unqualifiedRate?: number
 }
 
 /** 日统计趋势项 */

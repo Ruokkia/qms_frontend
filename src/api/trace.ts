@@ -5,6 +5,7 @@
  * 走真实后端，不经 Mock。
  */
 import axios, { type AxiosResponse } from 'axios'
+import { apiGet } from './request'
 import type { ApiResult } from '@/types'
 import type { TraceTreeResult, TraceNodeDetail, TraceQueryParams, TraceNode } from '@/types/trace'
 import { TraceDirectionEnum } from '@/enums/trace'
@@ -26,6 +27,41 @@ interface RawTraceNode {
 }
 /** 追溯 API 统一走同源代理：开发时 Vite 转发至 localhost:8080，生产时 Spring Boot 直接提供 */
 const incomingTraceBase = '/api/v2/incoming-trace'
+/** 按分类 + 条码查询产品/物料主数据，供 FAI 录入复用 */
+export interface TraceItemInfo {
+  itemCode: string
+  itemName: string
+  batchNo: string
+}
+
+export function getItemByBarcodeApi(
+  itemType: 'PRODUCT' | 'MATERIAL',
+  barcode: string,
+): Promise<ApiResult<TraceItemInfo>> {
+  return apiGet<TraceItemInfo>('/incoming-trace/item', {
+    baseURL: '/api/v2',
+    params: { itemType, barcode },
+  })
+}
+
+/** 条码模糊搜索候选结果，供 FAI 标准/变更触发项选择 */
+export interface TraceItemSearchResult {
+  barcode: string
+  itemCode: string
+  itemName: string
+  batchNo: string
+}
+
+export function searchItemsByBarcodeApi(
+  itemType: 'PRODUCT' | 'MATERIAL',
+  keyword: string,
+  limit = 20,
+): Promise<ApiResult<TraceItemSearchResult[]>> {
+  return apiGet<TraceItemSearchResult[]>('/incoming-trace/search', {
+    baseURL: '/api/v2',
+    params: { itemType, keyword, limit },
+  })
+}
 
 /** 追溯层级上限（固化基线） */
 const TRACE_MAX_LEVEL = 8

@@ -170,7 +170,11 @@ async function loadQuickItems() {
   }
 }
 
-onMounted(loadQuickItems)
+onMounted(() => {
+  // 从成品/来料列表带条码进入时，优先完成全链路查询，避免与 /tree 并发执行全量 /nodes 扫描。
+  const routeCode = typeof route.query.code === 'string' ? route.query.code.trim() : ''
+  if (!routeCode) loadQuickItems()
+})
 
 function setDirection(d: TraceDirectionEnum) {
   direction.value = d

@@ -10,6 +10,7 @@
       </div>
       <div class="header-actions">
         <QualityRuleDialog />
+        <el-button type="primary" size="default" @click="openCreate">新增</el-button>
         <el-button type="warning" size="default" :loading="reconcileLoading" @click="openReconcile">
           手动对账
         </el-button>
@@ -36,17 +37,18 @@
               <el-option :value="10" label="Top 10" />
               <el-option :value="20" label="Top 20" />
             </el-select>
-            <el-date-picker
-              v-model="trendDateRange"
-              type="daterange"
-              range-separator="至"
-              start-placeholder="开始"
-              end-placeholder="结束"
-              value-format="YYYY-MM-DD"
+            <el-input-number
+              v-model="trendDays"
+              :min="1"
+              :max="trendUnit === 'day' ? 31 : 12"
               size="small"
-              style="width:220px"
+              style="width:100px"
               @change="loadKeySupplierTrend"
             />
+            <el-select v-model="trendUnit" size="small" style="width:72px" @change="onTrendUnitChange">
+              <el-option value="day" label="天" />
+              <el-option value="month" label="月" />
+            </el-select>
           </div>
         </div>
         <div style="color:#909399; font-size:11px; margin:-4px 0 4px 2px">默认 Top 5 · 近30天</div>
@@ -55,20 +57,23 @@
       <div class="chart-card">
         <div class="card-header">
           <span class="card-title">供应商合格率排名</span>
-          <el-date-picker
-            v-model="rankDateRange"
-            type="daterange"
-            range-separator="至"
-            start-placeholder="开始"
-            end-placeholder="结束"
-            value-format="YYYY-MM-DD"
-            size="small"
-            style="width:220px"
-            @change="loadSupplierRank"
-          />
+          <div style="display:flex; gap:8px; align-items:center">
+            <el-input-number
+              v-model="rankDays"
+              :min="1"
+              :max="rankUnit === 'day' ? 31 : 12"
+              size="small"
+              style="width:100px"
+              @change="loadSupplierRank"
+            />
+            <el-select v-model="rankUnit" size="small" style="width:72px" @change="onRankUnitChange">
+              <el-option value="day" label="天" />
+              <el-option value="month" label="月" />
+            </el-select>
+          </div>
         </div>
-        <div style="color:#909399; font-size:11px; margin:-4px 0 4px 2px">默认近30天 · 按合格率升序，红色为重点关注</div>
-        <SupplierRankChart :data="supplierRankData" :loading="rankLoading" />
+        <div style="color:#909399; font-size:11px; margin:-4px 0 4px 2px">默认近30天 · 按合格率区间分布，点击区间查看明细</div>
+        <SupplierRankChart :data="supplierRankData" :loading="rankLoading" @range-click="openSupplierRange" />
       </div>
     </section>
 
@@ -207,6 +212,28 @@
     />
 
     <!-- 对账弹窗 -->
+
+    <!-- 供应商合格率区间明细 -->
+    <el-dialog
+      v-model="supplierRangeDialogVisible"
+      :title="`合格率区间：${selectedSupplierRange}`"
+      width="860px"
+      destroy-on-close
+    >
+      <el-table :data="selectedSupplierRangeItems" stripe max-height="460">
+        <el-table-column prop="supplierName" label="供应商" min-width="160" />
+        <el-table-column prop="supplierCode" label="供应商编码" min-width="130" />
+        <el-table-column prop="totalBatches" label="总批次" width="90" align="right" />
+        <el-table-column prop="qualifiedBatches" label="合格批次" width="90" align="right" />
+        <el-table-column prop="unqualifiedBatches" label="不合格批次" width="100" align="right" />
+        <el-table-column label="合格率" width="100" align="right">
+          <template #default="{ row }">{{ Number(row.passRate ?? 0).toFixed(2) }}%</template>
+        </el-table-column>
+        <el-table-column label="不合格率" width="100" align="right">
+          <template #default="{ row }">{{ Number(row.unqualifiedRate ?? (100 - Number(row.passRate ?? 0))).toFixed(2) }}%</template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
     <el-dialog v-model="reconcileVisible" title="手动对账" width="480">
       <div class="reconcile-body">
         <p class="reconcile-tip">扫描未关联异常单的不合格记录，自动创建异常单并发送通知。</p>
@@ -253,6 +280,7 @@ import {
   getKeySupplierTrendApi,
   getSupplierRankApi,
   getMaterialInspectionDetailApi,
+  createMaterialInspectionApi,
   updateMaterialInspectionApi,
   deleteMaterialInspectionApi,
   reconcileMaterialInspectionApi,
@@ -266,6 +294,7 @@ import type {
   MaterialInspectionStats,
   MaterialInspectionReconcileResultVO,
   KeySupplierTrend,
+  SupplierRankItem,
 } from '@/types/incoming'
 import TrendChart from './components/TrendChart.vue'
 import SupplierRankChart from './components/SupplierRankChart.vue'
@@ -318,23 +347,38 @@ async function loadStats() {
 }
 
 // ── 重点供应商趋势 ──────────────────────
-function defaultDateRange(): [string, string] {
+function computeDateRange(n: number, unit: string): [string, string] {
   const end = new Date()
   const start = new Date()
-  start.setDate(end.getDate() - 29)
+  if (unit === 'day') {
+    start.setDate(end.getDate() - (n - 1))
+  } else {
+    start.setMonth(end.getMonth() - n)
+  }
   const fmt = (d: Date) => d.toISOString().slice(0, 10)
   return [fmt(start), fmt(end)]
+}
+
+function onTrendUnitChange() {
+  trendDays.value = trendUnit.value === 'day' ? 30 : 12
+  loadKeySupplierTrend()
+}
+
+function onRankUnitChange() {
+  rankDays.value = rankUnit.value === 'day' ? 30 : 12
+  loadSupplierRank()
 }
 
 const keyTrendLoading = ref(false)
 const keySupplierTrend = ref<KeySupplierTrend | null>(null)
 const trendTopN = ref(5)
-const trendDateRange = ref<[string, string]>(defaultDateRange())
+const trendDays = ref(30)
+const trendUnit = ref('day')
 
 async function loadKeySupplierTrend() {
   keyTrendLoading.value = true
   try {
-    const [startDate, endDate] = trendDateRange.value
+    const [startDate, endDate] = computeDateRange(trendDays.value, trendUnit.value)
     const res = await getKeySupplierTrendApi(trendTopN.value, startDate, endDate)
     if (res.code === 0) keySupplierTrend.value = res.data
   } catch (e) {
@@ -346,13 +390,23 @@ async function loadKeySupplierTrend() {
 
 // ── 供应商合格率排名（独立接口） ──────────────────────
 const rankLoading = ref(false)
-const supplierRankData = ref<any[]>([])
-const rankDateRange = ref<[string, string]>(defaultDateRange())
+const supplierRankData = ref<SupplierRankItem[]>([])
+const supplierRangeDialogVisible = ref(false)
+const selectedSupplierRange = ref('')
+const selectedSupplierRangeItems = ref<SupplierRankItem[]>([])
+const rankDays = ref(30)
+const rankUnit = ref('day')
+
+function openSupplierRange(payload: { range: string; items: SupplierRankItem[] }) {
+  selectedSupplierRange.value = payload.range
+  selectedSupplierRangeItems.value = payload.items.slice().sort((a, b) => Number(a.passRate ?? 0) - Number(b.passRate ?? 0))
+  supplierRangeDialogVisible.value = true
+}
 
 async function loadSupplierRank() {
   rankLoading.value = true
   try {
-    const [startDate, endDate] = rankDateRange.value
+    const [startDate, endDate] = computeDateRange(rankDays.value, rankUnit.value)
     const res = await getSupplierRankApi(startDate, endDate)
     if (res.code === 0) supplierRankData.value = res.data || []
   } catch (e) {
@@ -510,14 +564,27 @@ async function openEdit(id: number) {
 async function onDetailSaved(data: Partial<MaterialInspection>) {
   savingDetail.value = true
   try {
-    // 更新
-    const res = await updateMaterialInspectionApi(data.id!, data)
-    if (res.code === 0) {
-      ElMessage.success('更新成功')
-      detailVisible.value = false
-      loadStats()
-      loadList()
-      loadSupplierRank()
+    if (detailMode.value === 'create' || !data.id) {
+      // 新增：不传 id
+      const { id, ...createData } = data as any
+      const res = await createMaterialInspectionApi(createData)
+      if (res.code === 0) {
+        ElMessage.success('新增成功')
+        detailVisible.value = false
+        loadStats()
+        loadList()
+        loadSupplierRank()
+      }
+    } else {
+      // 更新
+      const res = await updateMaterialInspectionApi(data.id!, data)
+      if (res.code === 0) {
+        ElMessage.success('更新成功')
+        detailVisible.value = false
+        loadStats()
+        loadList()
+        loadSupplierRank()
+      }
     }
   } catch (e: any) {
     if (!isErrorNotified(e)) ElMessage.error(`保存失败：${getErrorMessage(e)}`)
