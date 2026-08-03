@@ -104,13 +104,6 @@ export function getMaterialInspectionDetailApi(id: number): Promise<ApiResult<Ma
   return apiGet<MaterialInspection>(`${BASE}/${id}`)
 }
 
-/** 新增物料检验记录 */
-export function createMaterialInspectionApi(
-  data: Partial<MaterialInspection>,
-): Promise<ApiResult<MaterialInspection>> {
-  return apiPost<MaterialInspection>(BASE, data)
-}
-
 /** 更新物料检验记录 */
 export function updateMaterialInspectionApi(
   id: number,

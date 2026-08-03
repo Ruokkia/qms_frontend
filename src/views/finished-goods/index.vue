@@ -7,7 +7,6 @@
         <span class="breadcrumb">M1 来料与成品质量管控 / 成品入库检验审核</span>
       </div>
       <div class="header-actions">
-        <el-button type="primary" size="default" @click="openCreate">新增</el-button>
         <span class="module-tag">M1</span>
       </div>
     </div>
@@ -66,23 +65,23 @@
         style="width: 100%"
         :default-sort="{ prop: 'id', order: 'descending' }"
       >
-        <el-table-column prop="productName" label="产品名称" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="category" label="产品分类" width="100" align="center">
+        <el-table-column prop="productName" label="产品名称" min-width="160" show-overflow-tooltip />
+        <el-table-column prop="category" label="产品分类" min-width="90" align="center">
           <template #default="{ row }">
             <el-tag size="small" :type="row.category === '半成品' ? 'warning' : 'primary'">
               {{ row.category || '成品' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="modelSpec" label="型号规格" width="120" show-overflow-tooltip />
-        <el-table-column prop="prodBatchOrSn" label="生产批号/产品编号" width="150" show-overflow-tooltip />
-        <el-table-column prop="inspectionResult" label="检验结果" width="100" align="center">
+        <el-table-column prop="modelSpec" label="型号规格" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="prodBatchOrSn" label="生产批号/产品编号" min-width="160" show-overflow-tooltip />
+        <el-table-column prop="inspectionResult" label="检验结果" min-width="100" align="center">
           <template #default="{ row }">
             <span class="status-badge" :style="resultStyle(row.inspectionResult)">{{ row.inspectionResult || '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="expiryDate" label="过期日期" width="110" align="center" />
-        <el-table-column label="操作" width="280" align="center" fixed="right">
+        <el-table-column prop="expiryDate" label="过期日期" min-width="110" align="center" />
+        <el-table-column label="操作" min-width="260" align="center">
           <template #default="{ row }">
             <button class="text-btn" @click="openDetail(row.id)">详情</button>
             <button class="text-btn" style="margin-left:4px" @click="openEdit(row.id)">编辑</button>
@@ -204,7 +203,6 @@ import { useRouter } from 'vue-router'
 import {
   getFinishedGoodsListApi,
   getFinishedGoodsDetailApi,
-  createFinishedGoodsApi,
   updateFinishedGoodsApi,
   deleteFinishedGoodsApi,
 } from '@/api/finishedGoods'
@@ -337,20 +335,11 @@ async function openEdit(id: number) {
 
 async function onDetailSaved(data: Partial<FinishedGoodsInspection>) {
   try {
-    if (!data.id) {
-      const res = await createFinishedGoodsApi(data)
-      if (res.code === 0) {
-        ElMessage.success('新增成功')
-        detailVisible.value = false
-        loadList()
-      }
-    } else {
-      const res = await updateFinishedGoodsApi(data.id, data)
-      if (res.code === 0) {
-        ElMessage.success('更新成功')
-        detailVisible.value = false
-        loadList()
-      }
+    const res = await updateFinishedGoodsApi(data.id, data)
+    if (res.code === 0) {
+      ElMessage.success('更新成功')
+      detailVisible.value = false
+      loadList()
     }
   } catch (e: any) {
     if (!isErrorNotified(e)) ElMessage.error(`保存失败：${getErrorMessage(e)}`)

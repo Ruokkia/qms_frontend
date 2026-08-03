@@ -10,7 +10,6 @@
       </div>
       <div class="header-actions">
         <QualityRuleDialog />
-        <el-button type="primary" size="default" @click="openCreate">新增</el-button>
         <el-button type="warning" size="default" :loading="reconcileLoading" @click="openReconcile">
           手动对账
         </el-button>
@@ -254,7 +253,6 @@ import {
   getKeySupplierTrendApi,
   getSupplierRankApi,
   getMaterialInspectionDetailApi,
-  createMaterialInspectionApi,
   updateMaterialInspectionApi,
   deleteMaterialInspectionApi,
   reconcileMaterialInspectionApi,
@@ -512,27 +510,14 @@ async function openEdit(id: number) {
 async function onDetailSaved(data: Partial<MaterialInspection>) {
   savingDetail.value = true
   try {
-    if (detailMode.value === 'create' || !data.id) {
-      // 新增：不传 id
-      const { id, ...createData } = data as any
-      const res = await createMaterialInspectionApi(createData)
-      if (res.code === 0) {
-        ElMessage.success('新增成功')
-        detailVisible.value = false
-        loadStats()
-        loadList()
-        loadSupplierRank()
-      }
-    } else {
-      // 更新
-      const res = await updateMaterialInspectionApi(data.id!, data)
-      if (res.code === 0) {
-        ElMessage.success('更新成功')
-        detailVisible.value = false
-        loadStats()
-        loadList()
-        loadSupplierRank()
-      }
+    // 更新
+    const res = await updateMaterialInspectionApi(data.id!, data)
+    if (res.code === 0) {
+      ElMessage.success('更新成功')
+      detailVisible.value = false
+      loadStats()
+      loadList()
+      loadSupplierRank()
     }
   } catch (e: any) {
     if (!isErrorNotified(e)) ElMessage.error(`保存失败：${getErrorMessage(e)}`)

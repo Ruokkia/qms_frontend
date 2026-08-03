@@ -27,13 +27,6 @@ export function getFinishedGoodsDetailApi(
   return apiGet<FinishedGoodsInspection>(`${BASE}/${id}`)
 }
 
-/** 新增成品入库检验 */
-export function createFinishedGoodsApi(
-  data: Partial<FinishedGoodsInspection>,
-): Promise<ApiResult<FinishedGoodsInspection>> {
-  return apiPost<FinishedGoodsInspection>(BASE, data)
-}
-
 /** 更新成品入库检验 */
 export function updateFinishedGoodsApi(
   id: number,
