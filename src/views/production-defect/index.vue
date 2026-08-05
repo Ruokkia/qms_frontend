@@ -7,10 +7,9 @@
           <h1 class="header-title">不良信息管理</h1>
           <p class="header-sub">生产维修记录 · 不良趋势分析 · 高频排名 · {{ auth.user?.plantName }}分公司</p>
         </div>
-        <span class="module-tag">M1</span>
       </header>
 
-      <el-tabs v-model="activeTab" class="pd-tabs">
+      <el-tabs v-model="activeTab" class="pd-tabs" lazy>
         <el-tab-pane label="维修记录" name="list">
           <RepairList />
         </el-tab-pane>
@@ -127,15 +126,6 @@ onMounted(() => {
   font-size: 12px;
   color: #8c9ba8;
   margin: 0;
-}
-.module-tag {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  color: #fff;
-  background: #1b3a5b;
-  padding: 2px 8px;
-  border-radius: 3px;
-  letter-spacing: 0.5px;
 }
 .pd-page {
   padding: 4px 0;

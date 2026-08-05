@@ -94,7 +94,10 @@ export interface FinishedGoodsListParams extends PageParams {
   inspectionResult?: string
   qcReview?: string
   mgrApproval?: string
+  dateField?: string
+
   startDate?: string
+
   endDate?: string
   pageSize?: number
 }

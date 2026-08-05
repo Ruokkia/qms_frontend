@@ -4,10 +4,10 @@
     <div class="page-header">
       <div class="header-title">
         <h2>成品数据管理</h2>
-        <span class="breadcrumb">M1 来料与成品质量管控 / 成品入库检验审核</span>
+        <span class="breadcrumb">来料与成品质量管控 / 成品入库检验审核</span>
       </div>
       <div class="header-actions">
-        <span class="module-tag">M1</span>
+        <el-button type="primary" size="default" @click="openCreate">新增</el-button>
       </div>
     </div>
 
@@ -18,40 +18,63 @@
           v-model="filters.keyword"
           placeholder="报告编号 / 产品名称 / 物料编码"
           clearable
-          style="width: 280px"
+          style="width: 220px"
           @keyup.enter="search"
           @clear="search"
         />
-        <el-select v-model="filters.category" placeholder="产品分类" clearable style="width: 120px" @change="search">
+        <el-select v-model="filters.category" placeholder="产品分类" clearable style="width: 105px" @change="search">
           <el-option label="成品" value="成品" />
           <el-option label="半成品" value="半成品" />
         </el-select>
-        <el-select v-model="filters.inspectionResult" placeholder="检验结果" clearable style="width: 120px" @change="search">
+        <el-select v-model="filters.inspectionResult" placeholder="检验结果" clearable style="width: 105px" @change="search">
           <el-option label="合格" value="合格" />
           <el-option label="不合格" value="不合格" />
         </el-select>
-        <el-select v-model="filters.qcReview" placeholder="品管审核" clearable style="width: 120px" @change="search">
+        <el-select v-model="filters.qcReview" placeholder="品管审核" clearable style="width: 105px" @change="search">
           <el-option label="待审核" value="待审核" />
           <el-option label="已审核" value="已审核" />
           <el-option label="驳回" value="驳回" />
         </el-select>
-        <el-select v-model="filters.mgrApproval" placeholder="管代批准" clearable style="width: 120px" @change="search">
+        <el-select v-model="filters.mgrApproval" placeholder="管代批准" clearable style="width: 105px" @change="search">
           <el-option label="待审核" value="待审核" />
           <el-option label="已审核" value="已审核" />
           <el-option label="驳回" value="驳回" />
         </el-select>
+        <el-select
+          v-model="filters.dateField"
+          placeholder="日期类型"
+          clearable
+          style="width: 120px"
+          @change="handleDateFieldChange"
+>
+  <el-option label="生产日期" value="productionDate" />
+  <el-option label="过期日期" value="expiryDate" />
+  <el-option label="品管审核时间" value="qcReviewTime" />
+  <el-option label="管代批准时间" value="mgrApprovalTime" />
+  <el-option label="签名时间" value="signatureTime" />
+  <el-option label="创建时间" value="createdAt" />
+  <el-option label="更新时间" value="updatedAt" />
+</el-select>
         <el-date-picker
-          v-model="filters.dateRange"
-          type="daterange"
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
+          v-model="filters.startDate"
+          type="date"
+          placeholder="开始日期"
           value-format="YYYY-MM-DD"
-          style="width: 240px"
-          @change="search"
+          style="width: 125px"
+          @focus="ensureDateField"
+          @change="handleDateChange"
         />
-        <el-button type="default" @click="search">查询</el-button>
-        <el-button @click="resetFilters">重置</el-button>
+        <el-date-picker
+          v-model="filters.endDate"
+          type="date"
+          placeholder="结束日期"
+          value-format="YYYY-MM-DD"
+          style="width: 125px"
+          @focus="ensureDateField"
+          @change="handleDateChange"
+        />
+        <button class="query-btn" type="button" @click="search">查询</button>
+        <button class="reset-btn" type="button" @click="resetFilters">重置</button>
       </div>
     </div>
 
@@ -65,29 +88,47 @@
         style="width: 100%"
         :default-sort="{ prop: 'id', order: 'descending' }"
       >
-        <el-table-column prop="productName" label="产品名称" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="category" label="产品分类" min-width="90" align="center">
+        <el-table-column label="产品名称/型号规格" min-width="160">
+          <template #default="{ row }">
+            <div class="cell-main">{{ row.productName || '-' }}</div>
+            <div class="cell-sub">{{ row.modelSpec || '-' }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="产品分类" min-width="140" align="left">
           <template #default="{ row }">
             <el-tag size="small" :type="row.category === '半成品' ? 'warning' : 'primary'">
               {{ row.category || '成品' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="modelSpec" label="型号规格" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="prodBatchOrSn" label="生产批号/产品编号" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="inspectionResult" label="检验结果" min-width="100" align="center">
+        <el-table-column label="生产批号/产品编号" min-width="130" align="left">
           <template #default="{ row }">
-            <span class="status-badge" :style="resultStyle(row.inspectionResult)">{{ row.inspectionResult || '-' }}</span>
+            <span class="cell-main font-mono">{{ row.prodBatchOrSn || '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="expiryDate" label="过期日期" min-width="110" align="center" />
-        <el-table-column label="操作" min-width="260" align="center">
+        <el-table-column label="检验结果" width="90" align="left">
           <template #default="{ row }">
-            <button class="text-btn" @click="openDetail(row.id)">详情</button>
-            <button class="text-btn" style="margin-left:4px" @click="openEdit(row.id)">编辑</button>
-            <button class="text-btn text-btn-trace" style="margin-left:4px" @click="openTrace(row)">&#36861;&#28335;</button>
-            <button class="text-btn text-btn-danger" style="margin-left:4px" @click="deleteRecord(row.id)">删除</button>
-            <button class="text-btn text-btn-bind" style="margin-left:4px" @click="openBind(row)">绑定子类</button>
+            <span class="status-dot" :style="{ background: resultColor(row.inspectionResult) }"></span>
+            {{ row.inspectionResult || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="expiryDate" label="过期日期" width="105" align="center" />
+        <el-table-column label="操作" width="190" align="center" fixed="right">
+          <template #default="{ row }">
+            <div class="table-actions">
+              <button class="text-btn" @click="openDetail(row.id)">详情</button>
+              <button class="text-btn text-btn-trace" @click="openTrace(row)">&#36861;&#28335;</button>
+              <el-dropdown trigger="click">
+                <button class="text-btn table-more-btn" type="button">更多</button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item @click="openEdit(row.id)">编辑</el-dropdown-item>
+                    <el-dropdown-item @click="openBind(row)">绑定子类</el-dropdown-item>
+                    <el-dropdown-item divided @click="deleteRecord(row.id)">删除</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -203,6 +244,7 @@ import { useRouter } from 'vue-router'
 import {
   getFinishedGoodsListApi,
   getFinishedGoodsDetailApi,
+  createFinishedGoodsApi,
   updateFinishedGoodsApi,
   deleteFinishedGoodsApi,
 } from '@/api/finishedGoods'
@@ -214,15 +256,15 @@ import type { MaterialInspection, MaterialInspectionListParams } from '@/types/i
 import FinishedGoodsDetailDialog from './components/FinishedGoodsDetailDialog.vue'
 
 // ── 筛选 ──────────────────────────────────────────────────────
-const filters = reactive<FinishedGoodsListParams & { dateRange?: [string, string] | null }>({
+const filters = reactive<FinishedGoodsListParams>({
   keyword: '',
   category: '',
   inspectionResult: '',
   qcReview: '',
   mgrApproval: '',
   startDate: '',
+  dateField: '',
   endDate: '',
-  dateRange: null,
   page: 1,
   size: 10,
 })
@@ -239,12 +281,36 @@ function resetFilters() {
   filters.inspectionResult = ''
   filters.qcReview = ''
   filters.mgrApproval = ''
+  filters.dateField = ''
   filters.startDate = ''
   filters.endDate = ''
-  filters.dateRange = null
   filters.page = 1
   filters.size = 10
   loadList()
+}
+
+function handleDateFieldChange() {
+  if (!filters.dateField) {
+    filters.startDate = ''
+    filters.endDate = ''
+  }
+  search()
+}
+
+function ensureDateField() {
+  if (!filters.dateField) {
+    ElMessage.warning('请先选择日期类型')
+  }
+}
+
+function handleDateChange() {
+  if (!filters.dateField) {
+    filters.startDate = ''
+    filters.endDate = ''
+    ElMessage.warning('请先选择日期类型')
+    return
+  }
+  search()
 }
 
 function onSizeChange(size: number) {
@@ -272,8 +338,9 @@ async function loadList() {
       inspectionResult: filters.inspectionResult || undefined,
       qcReview: filters.qcReview || undefined,
       mgrApproval: filters.mgrApproval || undefined,
-      startDate: filters.dateRange?.[0] || undefined,
-      endDate: filters.dateRange?.[1] || undefined,
+      dateField: filters.dateField || undefined,
+      startDate: filters.startDate || undefined,
+      endDate: filters.endDate || undefined,
       page: filters.page!,
       size: filters.size!,
     }
@@ -335,11 +402,20 @@ async function openEdit(id: number) {
 
 async function onDetailSaved(data: Partial<FinishedGoodsInspection>) {
   try {
-    const res = await updateFinishedGoodsApi(data.id, data)
-    if (res.code === 0) {
-      ElMessage.success('更新成功')
-      detailVisible.value = false
-      loadList()
+    if (!data.id) {
+      const res = await createFinishedGoodsApi(data)
+      if (res.code === 0) {
+        ElMessage.success('新增成功')
+        detailVisible.value = false
+        loadList()
+      }
+    } else {
+      const res = await updateFinishedGoodsApi(data.id, data)
+      if (res.code === 0) {
+        ElMessage.success('更新成功')
+        detailVisible.value = false
+        loadList()
+      }
     }
   } catch (e: any) {
     if (!isErrorNotified(e)) ElMessage.error(`保存失败：${getErrorMessage(e)}`)
@@ -490,8 +566,6 @@ onMounted(() => loadList())
 <style scoped>
 .finished-goods-dashboard {
   padding: 20px 24px;
-  height: 100%;
-  overflow-y: auto;
 }
 
 /* 页面标题 */
@@ -515,14 +589,6 @@ onMounted(() => loadList())
   align-items: center;
   gap: 8px;
 }
-.module-tag {
-  font-size: 11px;
-  background: #1b3a5b;
-  color: #fff;
-  padding: 2px 8px;
-  border-radius: 4px;
-  letter-spacing: 1px;
-}
 
 /* 筛选栏 */
 .filter-bar {
@@ -530,11 +596,35 @@ onMounted(() => loadList())
 }
 .filter-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  flex-wrap: nowrap;
+  gap: 6px;
   align-items: center;
+  overflow-x: auto;
 }
 
+.query-btn {
+  background: #1b3a5b;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.query-btn:hover { background: #142a42; }
+.reset-btn {
+  background: transparent;
+  color: #5b6770;
+  border: 1px solid #d4cfc8;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.reset-btn:hover { border-color: #b8763e; color: #b8763e; }
 /* 表格 */
 .table-card {
   background: #fff;
@@ -549,6 +639,15 @@ onMounted(() => loadList())
 }
 
 /* 状态徽标 */
+.finished-goods-dashboard :deep(.cell-main) { font-size: 13px; color: #2a2a2a; }
+.finished-goods-dashboard :deep(.cell-sub) { font-size: 11px; color: #8b8680; margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+.status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 5px;
+}
 .status-badge {
   display: inline-block;
   padding: 2px 10px;
@@ -559,6 +658,9 @@ onMounted(() => loadList())
 }
 
 /* 文本按钮 */
+.table-actions { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+.table-more-btn { color: #5b7a99; }
+.table-more-btn:hover { color: #1b3a5b; }
 .text-btn {
   background: none;
   border: none;

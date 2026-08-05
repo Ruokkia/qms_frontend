@@ -75,15 +75,6 @@
       </div>
     </section>
 
-    <el-alert
-      v-if="showMock"
-      class="mock-alert"
-      type="info"
-      :closable="true"
-      show-icon
-      title="当前为前端 Mock 数据演示环境"
-      @close="showMock = false"
-    />
   </div>
 </template>
 
@@ -142,7 +133,6 @@ const filteredGroups = computed(() => {
 })
 
 const searchEmpty = computed(() => !roleEmpty.value && filteredGroups.value.length === 0)
-const showMock = ref(true)
 </script>
 
 <style scoped>
@@ -365,7 +355,6 @@ const showMock = ref(true)
   box-shadow: 0 3px 10px rgba(47, 129, 247, 0.12);
 }
 
-.mock-alert,
 .role-empty {
   margin-top: 16px;
 }

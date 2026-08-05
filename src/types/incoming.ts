@@ -183,6 +183,9 @@ export interface MaterialInspectionListParams extends PageParams {
   materialCode?: string
   /** 仅列表展示：关联关键物料绑定清单得到的物料条码。 */
   materialBarcode?: string
+  dateField?: string
+
   startDate?: string
+
   endDate?: string
 }
