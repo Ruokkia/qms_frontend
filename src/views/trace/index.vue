@@ -8,9 +8,6 @@
           父子ID递归 · 层级上限 {{ TRACE_MAX_LEVEL }} · 正向/反向穿透 · {{ auth.user?.plantName }}分公司
         </p>
       </div>
-      <div class="header-right">
-        <span class="header-tag">M0</span>
-      </div>
     </header>
 
     <!-- 追溯查询区：坐标轴式横向条 -->
@@ -281,15 +278,6 @@ if (inputValue.value) doQuery()
   color: #8c9ba8;
   margin: 0;
   letter-spacing: 0.3px;
-}
-.header-tag {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  font-weight: 600;
-  color: #b8763e;
-  border: 1px solid #b8763e;
-  border-radius: 3px;
-  padding: 2px 6px;
 }
 .entry-btn { border:0; background:#1b3a5b; color:#fff; border-radius:4px; padding:7px 12px; margin-right:10px; font-weight:600; cursor:pointer; }
 .relation-hint { margin: 0 0 18px; color: #697782; line-height: 1.65; font-size: 13px; }

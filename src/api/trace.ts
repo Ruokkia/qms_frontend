@@ -9,6 +9,7 @@ import { apiGet } from './request'
 import type { ApiResult } from '@/types'
 import type { TraceTreeResult, TraceNodeDetail, TraceQueryParams, TraceNode } from '@/types/trace'
 import { TraceDirectionEnum } from '@/enums/trace'
+import { buildTraceAuthorizationHeaders } from './trace-authorization'
 
 /** 后端原始追溯节点结构（convert 前） */
 interface RawTraceNode {
@@ -80,7 +81,10 @@ export function traceQueryApi(
   }
   return axios.get(`${incomingTraceBase}/tree`, {
     params: { rootBarcode: params.nodeCode, direction: directionMap[direction] },
-    headers: { Authorization: `Bearer ${sessionStorage.getItem('qms_token') || ''}` },
+    headers: buildTraceAuthorizationHeaders(
+      sessionStorage.getItem('qms_token'),
+      sessionStorage.getItem('qms_region'),
+    ),
   }).then((response: AxiosResponse<ApiResult<{ root: RawTraceNode; direction: string; visitedNodes: number; summary: Record<string, number> }>>) => {
     const data = response.data.data!
     const convert = (n: RawTraceNode): TraceNode => ({ id: n.id, nodeType: n.nodeType, nodeCode: n.barcode, name: n.name, productCode: n.productCode ?? undefined, specification: n.specification ?? undefined, materialCode: n.materialCode ?? undefined, materialBatchNo: n.materialBatchNo ?? undefined, parentId: null, children: (n.children || []).map(convert), batchInfo: n.materialBatchNo ? { batchNo: n.materialBatchNo, materialCode: n.materialCode ?? undefined, materialName: n.name } : null })
@@ -94,7 +98,10 @@ export function traceQueryApi(
 export function getTraceNodeDetailApi(id: number, type: 'fg' | 'mi'): Promise<ApiResult<TraceNodeDetail>> {
   return axios.get(`${incomingTraceBase}/nodes/${id}`, {
     params: { type },
-    headers: { Authorization: `Bearer ${sessionStorage.getItem('qms_token') || ''}` },
+    headers: buildTraceAuthorizationHeaders(
+      sessionStorage.getItem('qms_token'),
+      sessionStorage.getItem('qms_region'),
+    ),
   }).then((response: AxiosResponse<ApiResult<RawTraceNode>>) => {
     const raw = response.data.data!
     const convert = (n: RawTraceNode): TraceNode => ({ id: n.id, nodeType: n.nodeType, nodeCode: n.barcode, name: n.name, productCode: n.productCode ?? undefined, specification: n.specification ?? undefined, materialCode: n.materialCode ?? undefined, materialBatchNo: n.materialBatchNo ?? undefined, parentId: null, children: (n.children || []).map(convert), batchInfo: n.materialBatchNo ? { batchNo: n.materialBatchNo, materialCode: n.materialCode ?? undefined, materialName: n.name } : null })

@@ -77,6 +77,7 @@
 // ===== M0: 追溯列表视图 =====
 import { computed } from 'vue'
 import type { TraceTreeResult, TraceNode } from '@/types/trace'
+import { flattenTraceBranch } from '@/utils/trace-full-view'
 import {
   NodeTypeEnum,
   NODE_TYPE_LABELS,
@@ -104,13 +105,12 @@ const flatRows = computed<FlatRow[]>(() => {
   const rows: FlatRow[] = []
   const r = props.result
 
+  rows.push(toRow(r.rootNode, 'start', 0))
   if (r.upward?.length) {
-    const upLen = r.upward.length
-    for (let i = upLen - 1; i >= 0; i--) {
-      rows.push(toRow(r.upward[i], 'up', upLen - i))
+    for (const item of flattenTraceBranch(r.upward, 'up')) {
+      rows.push(toRow(item.node, item.direction, item.depth))
     }
   }
-  rows.push(toRow(r.rootNode, 'start', 0))
   if (r.children?.length) walkDown(r.children, 1, rows)
 
   // 标记每组中的最后一个节点（用于树形连接线 ├─ / └─）

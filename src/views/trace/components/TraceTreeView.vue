@@ -23,6 +23,7 @@
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import type { TraceTreeResult, TraceNode } from '@/types/trace'
+import { buildFullTraceRoot } from '@/utils/trace-full-view'
 import {
   NodeTypeEnum,
   NODE_TYPE_LABELS,
@@ -63,22 +64,9 @@ function buildEchartsTree(): EchartsNode {
   const r = props.result
   const queryId = r.rootNode?.id
 
-  // 有向上链：根=最顶层祖先，向下串联到起点，再接起点的向下子树
+  // 全链路：向上分支保留后端原始树结构，与“向上追溯”保持一致；下游分支并列展示。
   if (r.upward?.length) {
-    const root = toEchartsNode(r.upward[r.upward.length - 1], [], queryId)
-    let cur = root
-    for (let i = r.upward.length - 2; i >= 0; i--) {
-      const child = toEchartsNode(r.upward[i], [], queryId)
-      cur.children = [child]
-      cur = child
-    }
-    // cur 现在是 rootNode 的直接父节点
-    const rootEchart = toEchartsNode(r.rootNode, [], queryId)
-    if (r.children?.length) {
-      rootEchart.children = r.children.map((n) => toEchartsNode(n, [], queryId))
-    }
-    cur.children = [rootEchart]
-    return root
+    return toEchartsNode(buildFullTraceRoot(r), [], queryId)
   }
   // 无向上链：仅向下树或起点
   if (r.children?.length) {
