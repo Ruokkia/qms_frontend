@@ -85,17 +85,27 @@
           <el-input v-model="processForm.processCode" placeholder="如 ASM / WDG / INS" />
         </el-form-item>
         <el-form-item label="工序名称" required>
-          <el-select v-model="processForm.processName" placeholder="选择工序（红线固化）" style="width:100%">
+          <el-select
+            v-model="processForm.processName"
+            filterable
+            allow-create
+            default-first-option
+            placeholder="选择或输入工序名称"
+            style="width:100%"
+          >
             <el-option label="装配" value="装配" />
             <el-option label="焊接" value="焊接" />
             <el-option label="检测" value="检测" />
+            <el-option label="点胶" value="点胶" />
+            <el-option label="老化" value="老化" />
+            <el-option label="测试" value="测试" />
+            <el-option label="喷涂" value="喷涂" />
+            <el-option label="冲压" value="冲压" />
+            <el-option label="注塑" value="注塑" />
           </el-select>
         </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="processForm.description" type="textarea" :rows="2" />
-        </el-form-item>
-        <el-form-item label="排序">
-          <el-input-number v-model="processForm.sortOrder" :min="0" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -170,6 +180,8 @@ import type { SpcProcess, SpcParameter } from '@/types/spc'
 
 const store = useSpcStore()
 const paramTypes = ['尺寸', '温度', '压力', '扭矩', '电压']
+// 工序编码格式：2~5 位大写字母（与后端校验一致），用于提交前即时拦截脏编码
+const PROCESS_CODE_RE = /^[A-Z]{2,5}$/
 
 const selectedProcessId = ref<number | null>(null)
 const selectedProcess = computed(() =>
@@ -184,7 +196,7 @@ const paramVisible = ref(false)
 const saving = ref(false)
 
 const blankProcess: SpcProcess & { version?: number } = {
-  id: 0, processCode: '', processName: '', description: '', sortOrder: 0,
+  id: 0, processCode: '', processName: '', description: '',
   plantCode: '', plantName: '', version: undefined,
 }
 const processForm = ref<SpcProcess & { version?: number }>({ ...blankProcess })
@@ -222,14 +234,27 @@ async function submitProcess() {
     ElMessage.warning('请填写工序编码与名称')
     return
   }
+  if (!PROCESS_CODE_RE.test(f.processCode)) {
+    ElMessage.warning('工序编码须为 2~5 位大写字母（如 ASM / WDG / INS）')
+    return
+  }
   saving.value = true
   try {
     if (f.id) {
-      await store.updateProcess(f.id, { processCode: f.processCode, processName: f.processName, description: f.description, sortOrder: f.sortOrder, version: f.version })
+      await store.updateProcess(f.id, { processCode: f.processCode, processName: f.processName, description: f.description, version: f.version })
       ElMessage.success('工序已更新')
     } else {
-      await store.createProcess({ processCode: f.processCode, processName: f.processName, description: f.description, sortOrder: f.sortOrder })
+      const res = await store.createProcess({ processCode: f.processCode, processName: f.processName, description: f.description })
       ElMessage.success('工序已创建')
+      const newId = (res as any)?.data?.id
+      processVisible.value = false
+      await store.fetchProcesses()
+      // 新建成功后自动选中新工序，直接联动右侧参数编辑，省去手动点击
+      if (newId != null) {
+        selectedProcessId.value = newId
+        await store.fetchParameters(newId)
+      }
+      return
     }
     processVisible.value = false
     await store.fetchProcesses()
@@ -243,6 +268,7 @@ async function onDeleteProcess(row: SpcProcess) {
   ElMessage.success('工序已删除')
   if (selectedProcessId.value === row.id) selectedProcessId.value = null
   await store.fetchProcesses()
+  await store.fetchParameters() // 同步清除已级联删除的参数
 }
 
 function openParamDialog(row?: SpcParameter) {

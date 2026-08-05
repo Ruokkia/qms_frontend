@@ -15,7 +15,6 @@
           手动对账
         </el-button>
         <el-button type="primary" size="default" @click="openImport">批量导入</el-button>
-        <span class="module-tag">M1</span>
       </div>
     </header>
 
@@ -80,17 +79,25 @@
     <!-- 筛选 + 高频不良 -->
     <section class="filter-row">
       <div class="filter-group">
-        <el-date-picker
-          v-model="dateRange"
-          type="daterange"
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
-          value-format="YYYY-MM-DD"
+        <el-input
+          v-model="query.keyword"
+          placeholder="批次号 / 物料 / 供应商"
+          clearable
           size="default"
-          class="filter-date"
-          @change="handleSearch"
+          class="filter-input"
+          @keyup.enter="handleSearch"
         />
+        <el-select
+          v-model="query.inspectionResult"
+          placeholder="检验结果"
+          clearable
+          size="default"
+          class="filter-select"
+          @change="handleSearch"
+        >
+          <el-option label="合格" value="合格" />
+          <el-option label="不合格" value="不合格" />
+        </el-select>
         <el-select
           v-model="query.reviewStatus"
           placeholder="审核状态"
@@ -104,23 +111,42 @@
           <el-option label="驳回" value="驳回" />
         </el-select>
         <el-select
-          v-model="query.inspectionResult"
-          placeholder="检验结果"
+          v-model="dateField"
+          placeholder="日期类型"
           clearable
           size="default"
-          class="filter-select"
-          @change="handleSearch"
+          class="date-field-select"
+          @change="handleDateFieldChange"
         >
-          <el-option label="合格" value="合格" />
-          <el-option label="不合格" value="不合格" />
-        </el-select>
-        <el-input
-          v-model="query.keyword"
-          placeholder="批次号 / 物料 / 供应商"
-          clearable
+  <el-option label="检验日期" value="inspectionDate" />
+  <el-option label="判定日期" value="judgementDate" />
+  <el-option label="到货日期" value="arrivalDate" />
+  <el-option label="检验结束日期" value="inspectionEndDate" />
+  <el-option label="审核日期" value="reviewDate" />
+  <el-option label="提交日期" value="submitDate" />
+  <el-option label="签名时间" value="signatureTime" />
+  <el-option label="创建时间" value="createdAt" />
+  <el-option label="更新时间" value="updatedAt" />
+</el-select>
+        <el-date-picker
+          v-model="startDate"
+          type="date"
+          placeholder="开始日期"
+          value-format="YYYY-MM-DD"
           size="default"
-          class="filter-input"
-          @keyup.enter="handleSearch"
+          class="filter-date-single"
+          @focus="ensureDateField"
+          @change="handleDateChange"
+        />
+        <el-date-picker
+          v-model="endDate"
+          type="date"
+          placeholder="结束日期"
+          value-format="YYYY-MM-DD"
+          size="default"
+          class="filter-date-single"
+          @focus="ensureDateField"
+          @change="handleDateChange"
         />
         <button class="query-btn" @click="handleSearch">查询</button>
         <button class="reset-btn" @click="resetFilter">重置</button>
@@ -142,16 +168,6 @@
     <section class="table-card">
       <div class="card-header">
         <span class="card-title">来料检验记录</span>
-        <el-pagination
-          v-model:current-page="query.page"
-          v-model:page-size="query.size"
-          :total="pageTotal"
-          :page-sizes="[10, 20, 50, 100]"
-          layout="total, sizes, prev, pager, next, jumper"
-          size="small"
-          @current-change="loadList"
-          @size-change="handleSizeChange"
-        />
       </div>
       <el-table
         :data="pageList"
@@ -171,7 +187,7 @@
             <span style="font-family:'JetBrains Mono',monospace; font-size:12px">{{ row.materialBarcode || '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="供应商" min-width="130">
+        <el-table-column label="供应商/供应商编号" min-width="130">
           <template #default="{ row }">
             <div class="cell-main">{{ row.supplierName || '-' }}</div>
             <div class="cell-sub">{{ row.supplierCode || '-' }}</div>
@@ -184,23 +200,37 @@
           </template>
         </el-table-column>
         <el-table-column prop="inspectionDate" label="检验日期" width="105" align="center" />
-        <el-table-column label="操作" width="260" align="center" fixed="right">
+        <el-table-column label="操作" width="190" align="center" fixed="right">
           <template #default="{ row }">
-            <button class="text-btn" @click="openDetail(row.id)">详情</button>
-            <button class="text-btn text-btn-trace" @click="openTrace(row)">&#36861;&#28335;</button>
-            <button class="text-btn" style="margin-left:4px" @click="openEdit(row.id)">编辑</button>
-            <button class="text-btn text-btn-danger" style="margin-left:4px" @click="deleteRecord(row.id)">删除</button>
-            <button
-              v-if="row.inspectionResult === '不合格'"
-              class="text-btn text-btn-accent"
-              style="margin-left: 4px"
-              @click="openRectification(row)"
-            >
-              整改
-            </button>
+            <div class="table-actions">
+              <button class="text-btn" @click="openDetail(row.id)">详情</button>
+              <button class="text-btn text-btn-trace" @click="openTrace(row)">追溯</button>
+              <el-dropdown trigger="click">
+                <button class="text-btn table-more-btn" type="button">更多</button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item @click="openEdit(row.id)">编辑</el-dropdown-item>
+                    <el-dropdown-item v-if="row.inspectionResult === '不合格'" @click="openRectification(row)">整改</el-dropdown-item>
+                    <el-dropdown-item divided @click="deleteRecord(row.id)">删除</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
           </template>
         </el-table-column>
       </el-table>
+
+      <div class="pagination-wrap">
+        <el-pagination
+          v-model:current-page="query.page"
+          v-model:page-size="query.size"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="pageTotal"
+          layout="total, sizes, prev, pager, next, jumper"
+          @current-change="loadList"
+          @size-change="handleSizeChange"
+        />
+      </div>
     </section>
 
     <!-- 详情弹窗（含新增/编辑/查看，全部字段展示） -->
@@ -220,7 +250,11 @@
       width="860px"
       destroy-on-close
     >
-      <el-table :data="selectedSupplierRangeItems" stripe max-height="460">
+      <div class="supplier-range-toolbar">
+        <el-input v-model="supplierRangeKeyword" clearable placeholder="搜索供应商名称或编码" class="supplier-range-search" />
+        <span class="supplier-range-count">共 {{ filteredSupplierRangeItems.length }} 家供应商</span>
+      </div>
+      <el-table :data="filteredSupplierRangeItems" stripe max-height="460" empty-text="暂无匹配供应商">
         <el-table-column prop="supplierName" label="供应商" min-width="160" />
         <el-table-column prop="supplierCode" label="供应商编码" min-width="130" />
         <el-table-column prop="totalBatches" label="总批次" width="90" align="right" />
@@ -298,6 +332,7 @@ import type {
 } from '@/types/incoming'
 import TrendChart from './components/TrendChart.vue'
 import SupplierRankChart from './components/SupplierRankChart.vue'
+import { filterSupplierRankItems } from './components/supplierRankFilter'
 import IncomingDetailDialog from './components/IncomingDetailDialog.vue'
 import ImportDialog from './components/ImportDialog.vue'
 import QualityRuleDialog from '@/components/quality/QualityRuleDialog.vue'
@@ -394,12 +429,15 @@ const supplierRankData = ref<SupplierRankItem[]>([])
 const supplierRangeDialogVisible = ref(false)
 const selectedSupplierRange = ref('')
 const selectedSupplierRangeItems = ref<SupplierRankItem[]>([])
+const supplierRangeKeyword = ref('')
+const filteredSupplierRangeItems = computed(() => filterSupplierRankItems(selectedSupplierRangeItems.value, supplierRangeKeyword.value))
 const rankDays = ref(30)
 const rankUnit = ref('day')
 
 function openSupplierRange(payload: { range: string; items: SupplierRankItem[] }) {
   selectedSupplierRange.value = payload.range
   selectedSupplierRangeItems.value = payload.items.slice().sort((a, b) => Number(a.passRate ?? 0) - Number(b.passRate ?? 0))
+  supplierRangeKeyword.value = ''
   supplierRangeDialogVisible.value = true
 }
 
@@ -417,7 +455,9 @@ async function loadSupplierRank() {
 }
 
 // ── 筛选与列表 ──────────────────────────────────────────────
-const dateRange = ref<[string, string] | null>(null)
+const dateField = ref('')
+const startDate = ref('')
+const endDate = ref('')
 const query = reactive({
   page: 1,
   size: 10,
@@ -441,9 +481,10 @@ async function loadList() {
       reviewStatus: query.reviewStatus,
       inspectionResult: query.inspectionResult,
     }
-    if (dateRange.value) {
-      params.startDate = dateRange.value[0]
-      params.endDate = dateRange.value[1]
+    if (dateField.value) {
+      params.dateField = dateField.value
+      if (startDate.value) params.startDate = startDate.value
+      if (endDate.value) params.endDate = endDate.value
     }
     const res = await getMaterialInspectionListApi(params)
     if (res.code === 0) {
@@ -464,8 +505,34 @@ function resetFilter() {
   query.keyword = ''
   query.reviewStatus = ''
   query.inspectionResult = ''
-  dateRange.value = null
+  dateField.value = ''
+  startDate.value = ''
+  endDate.value = ''
   loadList()
+}
+
+function handleDateFieldChange() {
+  if (!dateField.value) {
+    startDate.value = ''
+    endDate.value = ''
+  }
+  handleSearch()
+}
+
+function ensureDateField() {
+  if (!dateField.value) {
+    ElMessage.warning('请先选择日期类型')
+  }
+}
+
+function handleDateChange() {
+  if (!dateField.value) {
+    startDate.value = ''
+    endDate.value = ''
+    ElMessage.warning('请先选择日期类型')
+    return
+  }
+  handleSearch()
 }
 
 function handleSearch() {
@@ -683,6 +750,20 @@ loadSupplierRank()
 </script>
 
 <style scoped>
+.supplier-range-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.supplier-range-search {
+  max-width: 360px;
+}
+.supplier-range-count {
+  color: #909399;
+  font-size: 12px;
+}
+
 .incoming-page {
   padding: 24px 32px 48px;
   max-width: 1440px;
@@ -717,15 +798,6 @@ loadSupplierRank()
   display: flex;
   align-items: center;
   gap: 10px;
-}
-.module-tag {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  font-weight: 600;
-  color: #b8763e;
-  border: 1px solid #b8763e;
-  border-radius: 3px;
-  padding: 2px 6px;
 }
 
 /* ── KPI 横条 ── */
@@ -800,31 +872,36 @@ loadSupplierRank()
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 .filter-group {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 6px;
+  flex-wrap: nowrap;
 }
 .filter-date {
   width: 240px;
 }
+.date-field-select {
+  width: 120px;
+}
+.filter-date-single {
+  width: 125px;
+}
 .filter-select {
-  width: 130px;
+  width: 110px;
 }
 .filter-input {
-  width: 200px;
+  width: 185px;
 }
 .query-btn {
   background: #1b3a5b;
   color: #fff;
   border: none;
   border-radius: 4px;
-  padding: 8px 18px;
+  padding: 8px 14px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -837,7 +914,7 @@ loadSupplierRank()
   color: #5b6770;
   border: 1px solid #d4cfc8;
   border-radius: 4px;
-  padding: 8px 16px;
+  padding: 8px 12px;
   font-size: 13px;
   cursor: pointer;
 }
@@ -870,6 +947,11 @@ loadSupplierRank()
   border-radius: 6px;
   padding: 16px 20px 20px;
 }
+.pagination-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
 .incoming-table :deep(.cell-main) {
   font-size: 13px;
   color: #2a2a2a;
@@ -898,19 +980,20 @@ loadSupplierRank()
   border-radius: 2px;
   border: 1px solid;
 }
+.table-actions { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+.table-more-btn { color: #5b7a99; }
+.table-more-btn:hover { color: #1b3a5b; }
 .text-btn {
-  background: transparent;
-  border: 1px solid #d4cfc8;
+  background: none;
+  border: none;
   color: #1b3a5b;
-  border-radius: 3px;
-  padding: 3px 10px;
-  font-size: 12px;
   cursor: pointer;
+  font-size: 13px;
+  padding: 2px 4px;
 }
 .text-btn:hover {
-  background: #1b3a5b;
-  color: #fff;
-  border-color: #1b3a5b;
+  color: #b8763e;
+  text-decoration: underline;
 }
 .text-btn-accent {
   color: #b84b3e;
@@ -925,15 +1008,8 @@ loadSupplierRank()
   color: #e04a3e;
   border-color: #e0c5c0;
 }
-.text-btn-trace {
-  color: #27844f;
-  border-color: #94d5aa;
-}
-.text-btn-trace:hover {
-  background: #27844f;
-  border-color: #27844f;
-  color: #fff;
-}
+.text-btn-trace { color: #27844f; }
+.text-btn-trace:hover { color: #176b3a; }
 .text-btn-danger:hover {
   background: #e04a3e;
   color: #fff;
@@ -985,7 +1061,12 @@ loadSupplierRank()
   .chart-grid { grid-template-columns: 1fr; }
   .kpi-strip { flex-wrap: wrap; }
   .kpi-cell { flex: 1 1 33%; border-bottom: 1px solid #f0ede9; }
-  .filter-row { flex-direction: column; align-items: flex-start; }
-  .header-actions { flex-wrap: wrap; }
+  .filter-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  }
 }
 </style>

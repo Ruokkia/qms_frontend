@@ -38,6 +38,8 @@ export interface SpcSample {
   subgroupId: number
   sampleNo: number
   sampleValue: number
+  /** 样本对应条码（SN 级追溯标识，可空） */
+  barcode?: string | null
 }
 
 /** 子组（含样本明细） */
@@ -56,6 +58,12 @@ export interface SpcSubgroup {
   batchNo?: string
   materialCode?: string
   materialName?: string
+  /** 分类：PRODUCT(产品) / MATERIAL(物料) */
+  itemType?: 'PRODUCT' | 'MATERIAL'
+  /** 产品/物料代码（随 itemType 取值，控制图关联维度） */
+  itemCode?: string
+  /** 关联工序 spc_process.id（由后端按 paramId 反查填充，用于 FAI 联动按工序定位） */
+  processId?: number
   processCode?: string
   subgroupStatus?: '待补样本' | '已完成'
   plantCode: string
@@ -66,10 +74,17 @@ export interface SpcSubgroup {
 /** 控制图单点 */
 export interface SpcChartPoint {
   subgroupNo: string
+  /** 分类：PRODUCT(产品) / MATERIAL(物料) */
+  itemType?: 'PRODUCT' | 'MATERIAL'
+  /** 产品/物料代码（随 itemType 取值，控制图关联维度） */
+  itemCode?: string
+  /** 来源批次号（子组级，悬停展示） */
+  batchNo?: string
   x: number
   r?: number | null
   s?: number | null
-  samples?: number[]
+  /** 样本明细（含条码，用于悬停展示） */
+  samples?: SpcSample[]
 }
 
 /** 控制图数据响应 */
@@ -146,6 +161,10 @@ export interface SpcSubgroupSaveRequest {
   paramId: number
   sampleValues: number[]
   sourceType?: string
+  /** 分类：PRODUCT(产品) / MATERIAL(物料) */
+  itemType?: 'PRODUCT' | 'MATERIAL'
+  /** 产品/物料代码（随 itemType 取值，控制图关联维度） */
+  itemCode?: string
 }
 
 /** 首件导入请求 */
