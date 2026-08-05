@@ -1,4 +1,4 @@
-import axios, { type AxiosInstance, type InternalAxiosRequestConfig, type AxiosResponse } from 'axios'
+import axios, { type AxiosInstance, type AxiosRequestConfig, type InternalAxiosRequestConfig, type AxiosResponse } from 'axios'
 import { ElMessage } from 'element-plus'
 import type { ApiResult } from '@/types'
 import { createRequestError, normalizeRequestError, type QmsRequestError } from './request-error'
@@ -59,28 +59,43 @@ service.interceptors.request.use(
 
 // 响应拦截器
 service.interceptors.response.use(
-  (response: AxiosResponse<ApiResult>) => {
+  ((response: AxiosResponse<ApiResult>) => {
+    // 二进制资源（如模板下载）直接透传完整响应，由调用方处理 Blob
+    if (response.config.responseType === 'blob') {
+      return response as unknown as AxiosResponse<ApiResult>
+    }
     const res = response.data
     if (res.code === 0) {
-      return res as any
+      return res as unknown as ApiResult
     }
 
     // 401 未认证 / 1008 Token 过期 → 静默刷新重试（refresh 请求自身除外）
-    if ((res.code === 401 || res.code === 1008) && !(response.config as any)._isRefresh) {
+    if ((res.code === 401 || res.code === 1008) && !(response.config as InternalAxiosRequestConfig & { _isRefresh?: boolean })._isRefresh) {
       return handleTokenExpired(response.config)
     }
 
+    // 诊断埋点：便于复现偶发 500 / 业务错误时定位真实失败端点
+    console.error(
+      `[request] 业务错误 ${response.config.method?.toUpperCase() ?? ''} ${response.config.url ?? ''} ` +
+      `code=${res.code} msg=${res.message ?? ''}`,
+    )
     const error = createRequestError(res.message || '请求失败，请稍后重试', 'business', {
       notified: true,
     })
     ElMessage.error(error.message)
     return Promise.reject(error)
-  },
+  }) as any,
   (error) => {
     // HTTP 层 401（兜底，后端目前统一返回 200 + code）
-    if (error.response?.status === 401 && !(error.config as any)?._isRefresh) {
+    if (error.response?.status === 401 && !(error.config as InternalAxiosRequestConfig & { _isRefresh?: boolean })?._isRefresh) {
       return handleTokenExpired(error.config)
     }
+    // 诊断埋点：便于复现偶发 500 / 网络错误时定位真实失败端点
+    const cfg = error.config || {}
+    console.error(
+      `[request] 响应错误 ${cfg.method?.toUpperCase() ?? ''} ${cfg.url ?? ''} ` +
+      `status=${error.response?.status ?? '-'} code=${error.response?.data?.code ?? '-'}`,
+    )
     const normalizedError = normalizeRequestError(error, true)
     ElMessage.error(normalizedError.message)
     return Promise.reject(normalizedError)
@@ -88,7 +103,7 @@ service.interceptors.response.use(
 )
 
 // ── Token 过期处理：静默刷新 + 重试原请求 ──
-async function handleTokenExpired(originalConfig: any): Promise<any> {
+async function handleTokenExpired(originalConfig: InternalAxiosRequestConfig): Promise<AxiosResponse<ApiResult> | Promise<never>> {
   const refreshToken = getRefreshToken()
 
   // 无 refresh token → 跳登录
@@ -96,7 +111,7 @@ async function handleTokenExpired(originalConfig: any): Promise<any> {
     clearAuthAndRedirect()
     const error = createRequestError('登录已过期，请重新登录', 'unauthorized', { notified: true })
     ElMessage.error(error.message)
-    return Promise.reject(error)
+    throw error
   }
 
   // 已有刷新请求进行中 → 排队等待
@@ -135,7 +150,7 @@ async function handleTokenExpired(originalConfig: any): Promise<any> {
     ElMessage.error(notifiedError.message)
     refreshQueue.forEach(({ reject }) => reject(notifiedError))
     refreshQueue = []
-    return Promise.reject(notifiedError)
+    throw notifiedError
   } finally {
     isRefreshing = false
   }
@@ -143,20 +158,20 @@ async function handleTokenExpired(originalConfig: any): Promise<any> {
 
 // ── 类型化请求包装（拦截器已将响应转为 ApiResult<T>） ──
 
-export function apiGet<T = any>(url: string, config?: any): Promise<ApiResult<T>> {
-  return service.get(url, config) as any
+export function apiGet<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<ApiResult<T>> {
+  return service.get(url, config) as unknown as Promise<ApiResult<T>>
 }
 
-export function apiPost<T = any>(url: string, data?: any, config?: any): Promise<ApiResult<T>> {
-  return service.post(url, data, config) as any
+export function apiPost<T = unknown, D = unknown>(url: string, data?: D | null, config?: AxiosRequestConfig): Promise<ApiResult<T>> {
+  return service.post(url, data, config) as unknown as Promise<ApiResult<T>>
 }
 
-export function apiPut<T = any>(url: string, data?: any, config?: any): Promise<ApiResult<T>> {
-  return service.put(url, data, config) as any
+export function apiPut<T = unknown, D = unknown>(url: string, data?: D | null, config?: AxiosRequestConfig): Promise<ApiResult<T>> {
+  return service.put(url, data, config) as unknown as Promise<ApiResult<T>>
 }
 
-export function apiDelete<T = any>(url: string, config?: any): Promise<ApiResult<T>> {
-  return service.delete(url, config) as any
+export function apiDelete<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<ApiResult<T>> {
+  return service.delete(url, config) as unknown as Promise<ApiResult<T>>
 }
 
 export default service

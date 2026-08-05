@@ -22,6 +22,9 @@ const chartRef = ref<HTMLDivElement | null>(null)
 let chart: echarts.ECharts | null = null
 let ro: ResizeObserver | null = null
 const hasData = computed(() => props.items.length > 0)
+const MAX_RETRY = 10
+let retryCount = 0
+let retryRafId = 0
 const rows = computed(() =>
   props.items.map((it) => ({
     name: it.name,
@@ -33,7 +36,10 @@ const rows = computed(() =>
 )
 
 function render() {
-  if (!chart) return
+  if (!chart) {
+    initChart()
+    return
+  }
   const reversed = [...props.items].reverse()
   const names = reversed.map((i) => i.name || '')
   const vals = reversed.map((i) => i.metricValue ?? 0)
@@ -63,16 +69,43 @@ function render() {
   )
 }
 
-onMounted(() => {
-  if (chartRef.value) {
-    chart = echarts.init(chartRef.value)
+function initChart() {
+  if (!chartRef.value) return
+  if (chart) {
     render()
-    ro = new ResizeObserver(() => chart?.resize())
-    ro.observe(chartRef.value)
+    return
   }
+  if (chartRef.value.clientWidth === 0 || chartRef.value.clientHeight === 0) {
+    if (retryCount < MAX_RETRY) {
+      retryCount++
+      retryRafId = requestAnimationFrame(() => initChart())
+    }
+    return
+  }
+  retryCount = 0
+  chart = echarts.init(chartRef.value)
+  render()
+}
+
+function ensureObserver() {
+  if (ro || !chartRef.value) return
+  ro = new ResizeObserver(() => {
+    if (!chartRef.value) return
+    if (chartRef.value.clientWidth > 0 && chartRef.value.clientHeight > 0) {
+      if (!chart) initChart()
+      else chart.resize()
+    }
+  })
+  ro.observe(chartRef.value)
+}
+
+onMounted(() => {
+  initChart()
+  ensureObserver()
 })
 watch(() => props.items, render, { deep: true })
 onUnmounted(() => {
+  if (retryRafId) cancelAnimationFrame(retryRafId)
   ro?.disconnect()
   chart?.dispose()
   chart = null

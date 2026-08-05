@@ -98,19 +98,19 @@
 
     <!-- 账号新建/编辑 -->
     <el-dialog v-model="userDialogVisible" :title="editingUser ? '编辑账号' : '新建账号'" width="520" @closed="resetUserForm">
-      <el-form :model="userForm" label-width="80px">
-        <el-form-item label="账号">
+      <el-form ref="userFormRef" :model="userForm" :rules="userFormRules" label-width="80px">
+        <el-form-item label="账号" prop="account">
           <el-input v-model="userForm.account" :disabled="!!editingUser" placeholder="登录账号" />
         </el-form-item>
-        <el-form-item label="姓名">
+        <el-form-item label="姓名" prop="realName">
           <el-input v-model="userForm.realName" placeholder="真实姓名" />
         </el-form-item>
-        <el-form-item label="角色">
+        <el-form-item label="角色" prop="roleCode">
           <el-select v-model="userForm.roleCode" placeholder="选择角色" style="width: 100%">
             <el-option v-for="r in roleChoices" :key="r.code" :label="r.name" :value="r.code" />
           </el-select>
         </el-form-item>
-        <el-form-item label="分公司">
+        <el-form-item label="分公司" prop="plantCode">
           <el-select v-model="userForm.plantCode" placeholder="选择分公司" style="width: 100%">
             <el-option label="深圳 (SZ)" value="SZ" />
             <el-option label="梅州 (MZ)" value="MZ" />
@@ -228,6 +228,7 @@ import { auditOperationName } from '@/utils/audit-operation'
 import { hasRequiredReason, isDialogCancellation } from '@/utils/dialog-action'
 import { isBuiltInRole, isMissingRoleError } from '@/utils/role-policy'
 import { permissionDetailsByModule, permissionsFromModuleActions, validatePermissionEdit } from '@/utils/permission-tree'
+import { getMissingAdminUserField } from '@/utils/admin-user-validation'
 import {
   getAdminUsers,
   createAdminUser,
@@ -302,6 +303,13 @@ function filterUsers() {
 
 const userDialogVisible = ref(false)
 const userSaving = ref(false)
+const userFormRef = ref()
+const userFormRules = {
+  account: [{ required: true, message: '请输入账号', trigger: 'blur' }],
+  realName: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
+  roleCode: [{ required: true, message: '请选择角色', trigger: 'change' }],
+  plantCode: [{ required: true, message: '请选择分公司', trigger: 'change' }],
+}
 const editingUser = ref<AdminUser | null>(null)
 const userForm = reactive<Record<string, unknown>>({
   account: '',
@@ -339,6 +347,11 @@ function openEdit(row: AdminUser) {
   userDialogVisible.value = true
 }
 async function saveUser() {
+  const missingField = getMissingAdminUserField({ account: userForm.account, realName: userForm.realName, roleCode: userForm.roleCode, plantCode: userForm.plantCode })
+  if (missingField) {
+    ElMessage.warning('请填写' + missingField)
+    return
+  }
   userSaving.value = true
   try {
     const payload: Record<string, unknown> = {
@@ -514,7 +527,7 @@ function syncModulePermissions() {
     roleForm.permissions,
   )
 }
-function toggleModuleSelection(moduleCode: string, enabled: unknown) {
+function toggleModuleSelection(moduleCode: string, enabled: boolean) {
   if (isSystemAdminModuleLocked(moduleCode)) return
   const selected = Boolean(enabled)
   if (selected && !isModuleSelected(moduleCode)) {
@@ -527,7 +540,7 @@ function toggleModuleSelection(moduleCode: string, enabled: unknown) {
   }
   syncModulePermissions()
 }
-function updateModuleActions(moduleCode: string, actions: unknown) {
+function updateModuleActions(moduleCode: string, actions: string[]) {
   if (!isModuleSelected(moduleCode) || !Array.isArray(actions)) return
   moduleActionSelections[moduleCode] = Array.from(new Set(['VIEW', ...actions.filter((action): action is string => typeof action === 'string')]))
   syncModulePermissions()

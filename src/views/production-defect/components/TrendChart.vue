@@ -15,9 +15,17 @@ const chartRef = ref<HTMLDivElement | null>(null)
 let chart: echarts.ECharts | null = null
 let ro: ResizeObserver | null = null
 const hasData = computed(() => props.points.length > 0)
+const MAX_RETRY = 10
+let retryCount = 0
+let retryRafId = 0
 
 function render() {
-  if (!chart) return
+  if (!chart) {
+    // 容器尚未初始化（如所在 tab 未激活 / 尺寸为 0 时 chart 为 null），
+    // 先尝试初始化，由 initChart 内部的重试机制在可见后完成渲染。
+    initChart()
+    return
+  }
   const x = props.points.map((p) => p.period || '')
   const y = props.points.map((p) => p.metricValue ?? 0)
   chart.setOption(
@@ -58,16 +66,45 @@ function render() {
   )
 }
 
-onMounted(() => {
-  if (chartRef.value) {
-    chart = echarts.init(chartRef.value)
+function initChart() {
+  if (!chartRef.value) return
+  if (chart) {
     render()
-    ro = new ResizeObserver(() => chart?.resize())
-    ro.observe(chartRef.value)
+    return
   }
+  if (chartRef.value.clientWidth === 0 || chartRef.value.clientHeight === 0) {
+    // 容器暂不可见（如所在 tab 未激活 / 布局未完成），有限次 rAF 重试，
+    // 同时已在 onMounted 注册 ResizeObserver 作为兜底，容器变可见时必触发初始化。
+    if (retryCount < MAX_RETRY) {
+      retryCount++
+      retryRafId = requestAnimationFrame(() => initChart())
+    }
+    return
+  }
+  retryCount = 0
+  chart = echarts.init(chartRef.value)
+  render()
+}
+
+function ensureObserver() {
+  if (ro || !chartRef.value) return
+  ro = new ResizeObserver(() => {
+    if (!chartRef.value) return
+    if (chartRef.value.clientWidth > 0 && chartRef.value.clientHeight > 0) {
+      if (!chart) initChart()
+      else chart.resize()
+    }
+  })
+  ro.observe(chartRef.value)
+}
+
+onMounted(() => {
+  initChart()
+  ensureObserver()
 })
 watch(() => props.points, render, { deep: true })
 onUnmounted(() => {
+  if (retryRafId) cancelAnimationFrame(retryRafId)
   ro?.disconnect()
   chart?.dispose()
   chart = null
