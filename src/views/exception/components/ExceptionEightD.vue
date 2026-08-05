@@ -48,6 +48,30 @@
         </div>
       </div>
     </div>
+
+    <div class="eight-d-history">
+      <div class="summary-title">8D 步骤留痕</div>
+      <el-table
+        :data="stepLogs"
+        v-loading="stepLogsLoading"
+        size="small"
+        border
+        empty-text="暂无留痕记录"
+      >
+        <el-table-column prop="step" label="步骤" width="70" />
+        <el-table-column label="操作" width="110">
+          <template #default="{ row }">
+            <el-tag :type="row.operation === 'SAVE' ? 'info' : 'warning'" size="small">
+              {{ operationText(row.operation) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="stepContent" label="内容快照" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="operator" label="操作人" width="100" />
+        <el-table-column prop="plantName" label="分公司" width="90" />
+        <el-table-column prop="operatedAt" label="操作时间" width="170" />
+      </el-table>
+    </div>
   </div>
 </template>
 
@@ -55,9 +79,9 @@
 // ===== M2: 8D 报告组件 =====
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { saveEightDApi, nextStepEightDApi } from '@/api/exception'
+import { saveEightDApi, nextStepEightDApi, getEightDHistoryApi } from '@/api/exception'
 import { EIGHT_D_STEP_LABELS, EIGHT_D_STEP_ORDER } from '@/enums/exception'
-import type { EightDReport, EightDSaveDTO } from '@/types/exception'
+import type { EightDReport, EightDSaveDTO, EightDStepLogVO } from '@/types/exception'
 
 const props = defineProps<{
   exceptionId: number
@@ -76,6 +100,9 @@ const currentVersion = ref<number | undefined>(undefined)
 const saveLoading = ref(false)
 const nextLoading = ref(false)
 const prevLoading = ref(false)
+
+const stepLogs = ref<EightDStepLogVO[]>([])
+const stepLogsLoading = ref(false)
 
 const form = ref<Record<string, string>>({
   d1Team: '',
@@ -108,6 +135,32 @@ watch(
   },
   { immediate: true },
 )
+
+watch(
+  () => props.exceptionId,
+  (id) => {
+    if (id) loadStepLogs(id)
+  },
+  { immediate: true },
+)
+
+async function loadStepLogs(exceptionId: number) {
+  stepLogsLoading.value = true
+  try {
+    const res = await getEightDHistoryApi(exceptionId)
+    if (res.code === 0) {
+      stepLogs.value = res.data || []
+    }
+  } catch (e) {
+    console.error('加载 8D 留痕失败', e)
+  } finally {
+    stepLogsLoading.value = false
+  }
+}
+
+function operationText(op: string) {
+  return op === 'SAVE' ? '保存内容' : op === 'NEXT_STEP' ? '推进到下一步' : op
+}
 
 function stepField(step: string) {
   const map: Record<string, string> = {
@@ -160,6 +213,7 @@ async function save() {
       ElMessage.success('保存成功')
       currentVersion.value = res.data.version
       emit('updated', res.data)
+      loadStepLogs(props.exceptionId)
     }
   } catch (e) {
     console.error('保存 8D 失败', e)
@@ -181,6 +235,7 @@ async function nextStep() {
     if (res.code === 0) {
       ElMessage.success('已提交到下一步')
       emit('updated', res.data)
+      loadStepLogs(props.exceptionId)
     }
   } catch (e) {
     console.error('提交下一步失败', e)

@@ -307,3 +307,17 @@ export interface CloseReadinessVO {
   canClose: boolean
   checks: CloseCheckItem[]
 }
+
+/** 8D 步骤留痕（对齐 qms.exception_8d_step_log 表） */
+export interface EightDStepLogVO {
+  id?: number
+  exceptionId?: number
+  step: string
+  stepContent?: string
+  operation: 'SAVE' | 'NEXT_STEP'
+  operator?: string
+  operatedAt?: string
+  plantCode?: string
+  plantName?: string
+  operationDesc?: string
+}

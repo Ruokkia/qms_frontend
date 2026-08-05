@@ -20,6 +20,7 @@ import type {
   AuditLog,
   CloseReadinessVO,
   QualityRuleCatalog,
+  EightDStepLogVO,
 } from '@/types/exception'
 
 
@@ -109,6 +110,11 @@ export function saveEightDApi(
 /** 提交 8D 到下一步 */
 export function nextStepEightDApi(exceptionId: number): Promise<ApiResult<EightDReport>> {
   return apiPost<EightDReport>(`${BASE}/${exceptionId}/eight-d/next-step`)
+}
+
+/** 查询 8D 步骤留痕 */
+export function getEightDHistoryApi(exceptionId: number): Promise<ApiResult<EightDStepLogVO[]>> {
+  return apiGet<EightDStepLogVO[]>(`${BASE}/${exceptionId}/eight-d/history`)
 }
 
 /** 供应商来料不良频次汇总 */
