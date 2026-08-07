@@ -369,7 +369,7 @@
           </template>
           <template v-else>
             <el-button @click="emit('update:modelValue', false)">关闭</el-button>
-            <el-button type="primary" @click="enterEdit">编辑</el-button>
+            <el-button v-if="!readonly" type="primary" @click="enterEdit">编辑</el-button>
           </template>
         </div>
       </div>
@@ -386,6 +386,8 @@ const props = defineProps<{
   modelValue: boolean
   detail?: MaterialInspection | null
   mode?: 'create' | 'view'
+  saving?: boolean
+  readonly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -395,7 +397,6 @@ const emit = defineEmits<{
 
 const isCreate = computed(() => props.mode === 'create')
 const isEditing = ref(false)
-const saving = ref(false)
 const formRef = ref<FormInstance>()
 
 // 深拷贝表单数据
@@ -577,17 +578,12 @@ function cancelEdit() {
 }
 
 async function handleSave() {
-  saving.value = true
-  try {
-    // 构建提交数据（过滤空字符串为 undefined 但保留原值）
-    const data: Record<string, any> = {}
-    for (const [k, v] of Object.entries(formData)) {
-      data[k] = v
-    }
-    emit('saved', data)
-  } finally {
-    saving.value = false
+  // 父页面执行请求并通过 saving 属性回传真实的异步状态。
+  const data: Record<string, any> = {}
+  for (const [k, v] of Object.entries(formData)) {
+    data[k] = v
   }
+  emit('saved', data)
 }
 
 function onClosed() {

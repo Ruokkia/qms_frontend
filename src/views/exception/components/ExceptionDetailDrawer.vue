@@ -234,7 +234,7 @@ async function initiate(type: string) {
   if (!detail.value) return
   initLoading.value = type
   try {
-    const res = await initiateProcessApi(detail.value.id, type)
+    const res = await initiateProcessApi(detail.value.id, { processType: type })
     if (res.code === 0) {
       ElMessage.success(`已发起${PROCESS_TYPE_LABELS[type]}流程`)
       await loadDetail()

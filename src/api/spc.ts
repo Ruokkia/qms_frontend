@@ -77,31 +77,68 @@ export function getSubgroupDetailApi(id: number): Promise<ApiResult<SpcSubgroup>
   return apiGet<SpcSubgroup>(`${BASE}/subgroups/${id}`)
 }
 
+/** 按首件记录查询 SPC 子组（FAI 跳转 SPC 自动定位待补子组） */
+export function getSubgroupsByFaiApi(faiRecordId: number): Promise<ApiResult<SpcSubgroup[]>> {
+  return apiGet<SpcSubgroup[]>(`${BASE}/subgroups/by-fai`, { params: { faiRecordId } })
+}
+
 export function deleteSubgroupApi(id: number): Promise<ApiResult<void>> {
   return apiDelete<void>(`${BASE}/subgroups/${id}`)
 }
 
+// ===== 统一代码字典（已签首件 ∪ 已激活标准） =====
+export interface SpcItemDict {
+  itemType?: string
+  itemCode?: string
+  itemName?: string
+  processCode?: string
+  paramCode?: string
+}
+
+/** 查询 SPC 统一代码字典（不再查 trace 表，消除两套体系冲突） */
+export function searchSpcItemsApi(keyword?: string): Promise<ApiResult<SpcItemDict[]>> {
+  return apiGet<SpcItemDict[]>(`${BASE}/items/search`, { params: { keyword } })
+}
+
 // ===== 控制图 =====
 
-export function getXbarRChartApi(paramId: number): Promise<ApiResult<SpcChartData>> {
-  return apiGet<SpcChartData>(`${BASE}/charts/${paramId}/xbar-r`)
+export function getXbarRChartApi(
+  paramId: number,
+  itemType?: 'PRODUCT' | 'MATERIAL',
+  itemCode?: string,
+  batchNo?: string,
+): Promise<ApiResult<SpcChartData>> {
+  return apiGet<SpcChartData>(`${BASE}/charts/${paramId}/xbar-r`, {
+    params: { itemType, itemCode, batchNo },
+  })
 }
 
-export function getXbarSChartApi(paramId: number): Promise<ApiResult<SpcChartData>> {
-  return apiGet<SpcChartData>(`${BASE}/charts/${paramId}/xbar-s`)
+export function getXbarSChartApi(
+  paramId: number,
+  itemType?: 'PRODUCT' | 'MATERIAL',
+  itemCode?: string,
+  batchNo?: string,
+): Promise<ApiResult<SpcChartData>> {
+  return apiGet<SpcChartData>(`${BASE}/charts/${paramId}/xbar-s`, {
+    params: { itemType, itemCode, batchNo },
+  })
 }
 
-export function recalcControlLimitsApi(paramId: number): Promise<ApiResult<any>> {
-  return apiPost<any>(`${BASE}/control-limits/${paramId}/recalc`)
+export function recalcControlLimitsApi(paramId: number): Promise<ApiResult<Record<string, unknown>>> {
+  return apiPost<Record<string, unknown>>(`${BASE}/control-limits/${paramId}/recalc`)
 }
 
 // ===== 过程能力 =====
 
-export function getCapabilityApi(paramId: number): Promise<ApiResult<SpcCapabilityResult>> {
-  return apiGet<SpcCapabilityResult>(`${BASE}/capability/${paramId}`)
+export function getCapabilityApi(paramId: number, itemType?: string, itemCode?: string, batchNo?: string): Promise<ApiResult<SpcCapabilityResult>> {
+  return apiGet<SpcCapabilityResult>(`${BASE}/capability/${paramId}`, {
+    params: { itemType, itemCode, batchNo }
+  })
 }
 
-export function recalcCapabilityApi(paramId: number): Promise<ApiResult<SpcCapabilityResult>> {
-  return apiPost<SpcCapabilityResult>(`${BASE}/capability/${paramId}/recalc`)
+export function recalcCapabilityApi(paramId: number, itemType?: string, itemCode?: string, batchNo?: string): Promise<ApiResult<SpcCapabilityResult>> {
+  return apiPost<SpcCapabilityResult>(`${BASE}/capability/${paramId}/recalc`, null, {
+    params: { itemType, itemCode, batchNo }
+  })
 }
 

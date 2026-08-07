@@ -44,22 +44,15 @@ const stages = computed<StageItem[]>(() => {
   const has8D = processIncludes8D(pt)
   const hasCapa = processIncludesCapa(pt)
 
-  if (has8D && hasCapa) {
+  if (has8D) {
+    // 含 8D 流程（8D / BOTH）：CAPA（治理层）与 8D（执行层）交错推进
     return [
-      { key: 'initiate', title: '1. 发起整改流程', desc: '选择 CAPA + 8D' },
-      { key: 'plan', title: '2. 制定整改计划', desc: '设定目标、周期与负责人' },
-      { key: 'measures', title: '3. 执行改善措施', desc: '临时措施 / 纠正措施 / 预防措施' },
-      { key: '8d', title: '4. 撰写 8D 报告', desc: 'D1~D8 八步问题解决法' },
+      { key: 'initiate', title: '1. 发起整改流程', desc: '选择 8D' + (hasCapa ? ' + CAPA' : '') + '，指派责任人' },
+      { key: '8d_analysis', title: '2. 8D 根因分析', desc: 'D0-D4 根因分析' },
+      { key: 'capa_root_approval', title: '3. CAPA 根因审批', desc: '质量部门审批根因分析结果' },
+      { key: '8d_measures', title: '4. 8D 措施与执行', desc: 'D5 措施方案 + D6-D8 执行' },
       { key: 'verify', title: '5. 验证与闭环', desc: '验证有效性 → 线上闭环' },
       { key: 'audit', title: '6. 审核追溯', desc: '全过程操作审计记录' },
-    ]
-  } else if (has8D) {
-    return [
-      { key: 'initiate', title: '1. 发起整改流程', desc: '选择 8D 报告' },
-      { key: '8d', title: '2. 撰写 8D 报告', desc: 'D1~D8 八步问题解决法' },
-      { key: 'measures', title: '3. 执行改善措施', desc: '临时措施 / 纠正措施 / 预防措施' },
-      { key: 'verify', title: '4. 验证与闭环', desc: '验证有效性 → 线上闭环' },
-      { key: 'audit', title: '5. 审核追溯', desc: '全过程操作审计记录' },
     ]
   } else {
     return [

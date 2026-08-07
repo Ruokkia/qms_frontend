@@ -65,7 +65,7 @@
             <span v-else class="dim">—</span>
           </td>
           <td class="cell-action">
-            <button class="detail-btn" @click.stop="$emit('viewDetail', row.node.id)">详情</button>
+            <button class="detail-btn" @click.stop="$emit('viewDetail', row.node)">详情</button>
           </td>
         </tr>
       </tbody>
@@ -86,7 +86,7 @@ import {
 } from '@/enums/trace'
 
 const props = defineProps<{ result: TraceTreeResult }>()
-defineEmits<{ viewDetail: [id: string | number] }>()
+defineEmits<{ viewDetail: [node: TraceNode] }>()
 
 interface FlatRow {
   key: string

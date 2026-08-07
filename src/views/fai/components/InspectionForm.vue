@@ -8,7 +8,12 @@
     <div v-if="record" v-loading="store.loading">
       <!-- 基础信息 -->
       <el-descriptions :column="2" border size="small" class="info-block">
-        <el-descriptions-item label="物料名称">{{ record.materialName || '-' }}</el-descriptions-item>
+        <el-descriptions-item :label="`${recordTypeLabel}名称`">
+          {{ record.itemName || record.materialName || '-' }}
+        </el-descriptions-item>
+        <el-descriptions-item :label="`${recordTypeLabel}代码`">
+          {{ record.itemCode || record.materialCode || '-' }}
+        </el-descriptions-item>
         <el-descriptions-item label="批次号">{{ record.batchNo || '-' }}</el-descriptions-item>
         <el-descriptions-item label="工序">{{ record.processName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="工单号">{{ record.workOrderNo || '-' }}</el-descriptions-item>
@@ -21,6 +26,19 @@
           </el-tag>
         </el-descriptions-item>
       </el-descriptions>
+
+      <!-- 已签锁定提示 -->
+      <el-alert
+        v-if="record.signatureStatus === '已签'"
+        type="success"
+        :closable="false"
+        show-icon
+        class="block-alert"
+      >
+        <template #title>
+          已完成电子签名，检验数据已锁定。如需修改，请联系管理员作废后重新建单
+        </template>
+      </el-alert>
 
       <!-- 不合格拦截提示 -->
       <el-alert
@@ -49,6 +67,21 @@
 
       <!-- 检验结果总览 -->
       <InspectionResult :record="record" class="block-alert" />
+
+      <!-- 无标准参数项引导 -->
+      <el-alert
+        v-if="!store.loading && localItems.length === 0"
+        type="warning"
+        :closable="false"
+        show-icon
+        class="block-alert"
+      >
+        <template #title>
+          该检验单暂无标准参数项：请先在「首件检验标准维护」中为{{ recordTypeLabel }}[{{
+            record.itemCode || record.materialCode || '-'
+          }}] 工序[{{ record.processName || '-' }}]配置SPC参数并激活，再点击「刷新标准」同步
+        </template>
+      </el-alert>
 
       <!-- 参数录入表 -->
       <div class="section-title">检验参数录入</div>
@@ -89,6 +122,7 @@
               v-model="row.actualValue"
               :precision="4"
               :controls="false"
+              :disabled="record?.signatureStatus === '已签'"
               style="width: 150px"
               placeholder="录入"
             />
@@ -102,8 +136,8 @@
       </el-table>
 
       <div class="footer-actions">
-        <el-button :loading="refreshing" @click="handleRefreshStandard">刷新标准</el-button>
-        <el-button type="primary" :icon="Check" :loading="submitting" @click="submit">提交并判定</el-button>
+        <el-button :loading="refreshing" :disabled="record?.signatureStatus === '已签'" @click="handleRefreshStandard">刷新标准</el-button>
+        <el-button type="primary" :icon="Check" :loading="submitting" :disabled="record?.signatureStatus === '已签'" @click="submit">提交并判定</el-button>
           <el-tooltip
             :content="record.signatureStatus === '已签' ? '已完成电子签名' : '请先提交检验结果（录入实际值并完成判定）后再进行电子签名'"
             :disabled="!(record.signatureStatus === '已签' || record.inspectionResult === '待判定')"
@@ -151,6 +185,8 @@ const visible = computed({
 })
 
 const record = computed<FaiInspectionRecordResponse | null>(() => store.currentInspection)
+// 标签取自记录自身的分类，保证抽屉内文案与该单据真实类型一致（不受全局选择器影响）
+const recordTypeLabel = computed(() => (record.value?.itemType === 'PRODUCT' ? '产品' : '物料'))
 const localItems = ref<FaiInspectionItem[]>([])
 const refreshing = ref(false)
 
@@ -176,7 +212,7 @@ async function handleRefreshStandard() {
     ElMessage.success('标准已刷新')
     emit('updated')
   } catch {
-    ElMessage.error('刷新标准失败')
+    // 具体失败原因（含物料/工序/工厂信息）已由请求拦截器统一弹出，此处不再覆盖为笼统提示
   } finally {
     refreshing.value = false
   }

@@ -3,7 +3,7 @@
  */
 
 /** 统一 API 响应结构 */
-export interface ApiResult<T = any> {
+export interface ApiResult<T = unknown> {
   code: number
   message: string
   data: T
@@ -16,7 +16,7 @@ export interface PageParams {
 }
 
 /** 分页响应结构 */
-export interface PageResult<T = any> {
+export interface PageResult<T = unknown> {
   list: T[]
   total: number
   page: number
@@ -129,7 +129,8 @@ export interface NavItem {
 export interface AdminUser { id: number; account: string; realName: string; roleCode: string; plantCode: PlantCode; plantName: string; status: number; authVersion: number; lastLoginAt?: string }
 export interface PermissionDisplay { code: string; name: string; description: string }
 export interface RolePermission { roleCode: string; roleName: string; dataScope: 'OWN_PLANT' | 'ALL_PLANTS'; dataScopeName?: string; dataScopeDescription?: string; version: number; permissions: string[]; permissionDetails?: PermissionDisplay[] }
-export interface AdminAudit { id: number; operationType: string; operatorName: string; afterData?: string; ipAddress?: string; operationTime?: string; reason?: string }
+export interface AdminAudit { id: number; operationType: string; operatorName: string; afterData?: string; operationContent?: string; ipAddress?: string; operationTime?: string; reason?: string }
+export interface NotificationConfig { id: number; scenarioCode: string; scenarioName: string; roleCodes: string; severityExtraRoles?: string; enabled: number; version: number }
 
 /** 角色配置 */
 export interface RoleConfig {

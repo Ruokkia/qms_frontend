@@ -66,7 +66,7 @@
 // ===== M2: 通知中心组件 =====
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElNotification } from 'element-plus'
 import { Bell } from '@element-plus/icons-vue'
 import {
   getNotificationListApi,
@@ -76,6 +76,11 @@ import {
 } from '@/api/notification'
 import type { Notification } from '@/types/notification'
 import { NOTIFICATION_TYPE_COLORS } from '@/enums/notification'
+import {
+  connectNotificationSocket,
+  disconnectNotificationSocket,
+  onNotification,
+} from '@/utils/notificationSocket'
 
 const router = useRouter()
 
@@ -142,12 +147,16 @@ async function markAllRead() {
   }
 }
 
+const EXCEPTION_BIZ_TYPES = ['EXCEPTION_ORDER']
+
 function handleClick(item: Notification) {
   if (item.isRead === 0) markRead(item)
-  if (item.businessType === 'EXCEPTION_ORDER' && item.businessId) {
-    router.push(`/exception?detail=${item.businessId}`)
-  } else if (item.businessType === 'ESCALATION' && item.businessId) {
-    router.push(`/exception?escalation=${item.businessId}`)
+  if (item.businessId) {
+    if (EXCEPTION_BIZ_TYPES.includes(item.businessType!)) {
+      router.push(`/exception/${item.businessId}`)
+    } else if (item.businessType === 'ESCALATION') {
+      router.push(`/exception?escalation=${item.businessId}`)
+    }
   }
   visible.value = false
 }
@@ -166,16 +175,41 @@ function formatTime(time?: string) {
   return time.slice(0, 16).replace('T', ' ')
 }
 
+/** 实时通知到达：弹窗提示 + 未读数 +1，并预置到列表（去重） */
+function handleRealtimeNotification(payload: Notification) {
+  unreadCount.value = Math.max(0, unreadCount.value) + 1
+  if (!list.value.some((it) => it.id === payload.id)) {
+    list.value = [payload, ...list.value].slice(0, 8)
+    total.value = total.value + 1
+  }
+  ElNotification({
+    title: payload.title || '新通知',
+    message: payload.content || '',
+    type: 'info',
+    duration: 4500,
+    customClass: 'qms-realtime-notify',
+    // 点击弹窗跳转业务详情
+    onClick: () => {
+      if (payload.businessId) handleClick(payload)
+    },
+  })
+}
+
 onMounted(() => {
   loadUnread()
   window.addEventListener('notification-read', loadUnread)
-  // 每 60 秒轮询未读数
+  // 每 60 秒轮询未读数（实时推送的补充兜底）
   pollTimer = window.setInterval(loadUnread, 60000)
+  // D10：建立实时通知 WebSocket 连接
+  connectNotificationSocket()
+  onNotification((payload) => handleRealtimeNotification(payload as Notification))
 })
 
 onUnmounted(() => {
   if (pollTimer) window.clearInterval(pollTimer)
   window.removeEventListener('notification-read', loadUnread)
+  // 登出/布局卸载时断开 WS，避免悬挂连接
+  disconnectNotificationSocket()
 })
 </script>
 

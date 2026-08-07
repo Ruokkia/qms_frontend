@@ -80,6 +80,103 @@
         </el-table>
       </el-tab-pane>
 
+      <!-- 通知配置 -->
+      <el-tab-pane label="通知配置" name="notificationConfig">
+        <el-table :data="notificationConfigs" v-loading="notificationConfigLoading" class="data-table">
+          <el-table-column label="所属菜单" width="180">
+            <template #default="{ row }">{{ notificationMenuName(row.scenarioCode) }}</template>
+          </el-table-column>
+          <el-table-column prop="scenarioName" label="场景名称" width="200" />
+          <el-table-column label="接收角色" min-width="180">
+            <template #default="{ row }">
+              <el-button v-if="notificationRoleSummary(row.roleCodes) !== '—'" link type="primary" @click="openNotificationRoleDrawer('接收角色', row.roleCodes)">
+                {{ notificationRoleSummary(row.roleCodes) }}
+              </el-button>
+              <span v-else class="text-muted">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="严重追加角色" min-width="180">
+            <template #default="{ row }">
+              <el-button v-if="row.scenarioCode === 'EXCEPTION_CREATED' && notificationRoleSummary(row.severityExtraRoles) !== '—'" link type="primary" @click="openNotificationRoleDrawer('严重追加角色', row.severityExtraRoles)">
+                {{ notificationRoleSummary(row.severityExtraRoles) }}
+              </el-button>
+              <span v-else class="text-muted">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="80">
+            <template #default="{ row }">
+              <el-tag :type="row.enabled === 1 ? 'success' : 'info'" size="small">{{ row.enabled === 1 ? '启用' : '禁用' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="150">
+            <template #default="{ row }">
+              <el-button type="primary" link @click="openNotificationConfigDialog(row)">编辑</el-button>
+              <el-button :type="row.enabled === 1 ? 'warning' : 'success'" link :loading="notificationConfigStatusChanging === row.id" @click="changeNotificationConfigStatus(row)">
+                {{ row.enabled === 1 ? '停用' : '启用' }}
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-tab-pane>
+
+      <!-- 审批配置 -->
+      <el-tab-pane label="审批配置" name="approval">
+        <div class="approval-toolbar">
+          <el-radio-group v-model="approvalFlow" @change="onFlowChange">
+            <el-radio-button value="8D">8D 流程</el-radio-button>
+            <el-radio-button value="CAPA">CAPA 流程</el-radio-button>
+          </el-radio-group>
+          <el-button type="primary" @click="openConfigCreate">新增配置</el-button>
+        </div>
+        <p class="config-hint">配置各阶段是否需要审批及审批角色，按当前分公司隔离（{{ auth.user?.plantName || '当前分公司' }}）。</p>
+        <el-table :data="approvalConfigs" v-loading="approvalLoading" class="data-table">
+          <el-table-column prop="stage" label="阶段" width="100" />
+          <el-table-column prop="stageName" label="阶段名称" min-width="160" />
+          <el-table-column label="需要审批" width="100" align="center">
+            <template #default="{ row }">
+              <el-tag :type="row.needApproval === 1 ? 'success' : 'info'" size="small">{{ row.needApproval === 1 ? '需要' : '不需要' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="审批角色" min-width="200">
+            <template #default="{ row }">{{ approverRoleLabel(row.approverRole) }}</template>
+          </el-table-column>
+          <el-table-column prop="updatedAt" label="更新时间" min-width="170" show-overflow-tooltip />
+          <el-table-column label="操作" width="150" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openConfigEdit(row)">编辑</el-button>
+              <el-button link type="danger" :loading="configDeleting === row.id" @click="removeConfig(row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-dialog v-model="configDialogVisible" :title="editingConfig ? '编辑审批配置' : '新增审批配置'" width="520px" @closed="resetConfigForm">
+          <el-form ref="configFormRef" :model="configForm" :rules="configFormRules" label-width="90px">
+            <el-form-item label="流程" prop="processFlow">
+              <el-input :model-value="approvalFlow" disabled />
+            </el-form-item>
+            <el-form-item label="阶段" prop="stage">
+              <el-select v-model="configForm.stage" placeholder="选择阶段" style="width: 100%" :disabled="!!editingConfig" @change="onStageChange">
+                <el-option v-for="s in currentStageOptions" :key="s.value" :label="s.label" :value="s.value" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="阶段名称" prop="stageName">
+              <el-input v-model="configForm.stageName" placeholder="阶段名称" maxlength="50" />
+            </el-form-item>
+            <el-form-item label="需要审批" prop="needApproval">
+              <el-switch v-model="configForm.needApproval" :active-value="1" :inactive-value="0" active-text="需要" inactive-text="不需要" />
+            </el-form-item>
+            <el-form-item label="审批角色" prop="approverRole">
+              <el-select v-model="configForm.approverRole" multiple placeholder="选择审批角色" style="width: 100%" :disabled="configForm.needApproval !== 1">
+                <el-option v-for="role in roleOptions" :key="role.code" :label="role.name" :value="role.code" />
+              </el-select>
+            </el-form-item>
+          </el-form>
+          <template #footer>
+            <el-button @click="configDialogVisible = false">取消</el-button>
+            <el-button type="primary" :loading="configSaving" @click="saveConfig">保存</el-button>
+          </template>
+        </el-dialog>
+      </el-tab-pane>
+
       <!-- 审计日志 -->
       <el-tab-pane label="审计日志" name="audit">
         <el-table :data="audits" v-loading="auditLoading" class="data-table">
@@ -93,8 +190,55 @@
           <el-table-column prop="reason" label="原因" min-width="160" show-overflow-tooltip />
           <el-table-column prop="afterData" label="变更内容" min-width="220" show-overflow-tooltip />
         </el-table>
+        <el-pagination
+          v-if="auditTotal > auditPageSize"
+          v-model:current-page="auditPage"
+          :page-size="auditPageSize"
+          :total="auditTotal"
+          layout="total, prev, pager, next"
+          class="audit-pagination"
+          @current-change="loadAudit"
+        />
       </el-tab-pane>
     </el-tabs>
+
+    <!-- 通知配置编辑 -->
+    <el-dialog v-model="notificationConfigDialogVisible" :title="'编辑通知配置 - ' + (editingNotificationConfig?.scenarioName || '')" width="560px" @closed="resetNotificationConfigForm">
+      <el-form label-width="110px">
+        <el-form-item label="场景名称">
+          <el-input :model-value="editingNotificationConfig?.scenarioName" disabled />
+        </el-form-item>
+        <el-form-item label="接收角色">
+          <el-checkbox-group v-model="notificationConfigForm.roleCodes">
+            <el-checkbox v-for="role in roleChoices" :key="role.code" :label="role.code">{{ role.name }}</el-checkbox>
+          </el-checkbox-group>
+        </el-form-item>
+        <el-form-item v-if="editingNotificationConfig?.scenarioCode === 'EXCEPTION_CREATED'" label="严重追加角色">
+          <el-checkbox-group v-model="notificationConfigForm.severityExtraRoles">
+            <el-checkbox v-for="role in roleChoices" :key="role.code" :label="role.code">{{ role.name }}</el-checkbox>
+          </el-checkbox-group>
+        </el-form-item>
+        <el-form-item label="是否启用">
+          <el-switch v-model="notificationConfigForm.enabled" :active-value="1" :inactive-value="0" />
+        </el-form-item>
+        <el-form-item label="修改原因" required>
+          <el-input v-model="notificationConfigForm.reason" type="textarea" placeholder="请输入修改原因（记录到审计日志）" maxlength="200" show-word-limit />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="notificationConfigDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="notificationConfigSaving" @click="saveNotificationConfig">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-drawer v-model="notificationRoleDrawerVisible" :title="notificationRoleDrawerTitle" size="360px">
+      <el-empty v-if="notificationRoleDrawerRoles.length === 0" description="暂无配置角色" />
+      <el-descriptions v-else :column="1" border>
+        <el-descriptions-item v-for="role in notificationRoleDrawerRoles" :key="role.code" :label="role.name">
+          {{ role.code }}
+        </el-descriptions-item>
+      </el-descriptions>
+    </el-drawer>
 
     <!-- 账号新建/编辑 -->
     <el-dialog v-model="userDialogVisible" :title="editingUser ? '编辑账号' : '新建账号'" width="520" @closed="resetUserForm">
@@ -225,10 +369,12 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { auditOperationName } from '@/utils/audit-operation'
+import { auditContent } from '@/utils/audit-content'
 import { hasRequiredReason, isDialogCancellation } from '@/utils/dialog-action'
 import { isBuiltInRole, isMissingRoleError } from '@/utils/role-policy'
 import { permissionDetailsByModule, permissionsFromModuleActions, validatePermissionEdit } from '@/utils/permission-tree'
 import { getMissingAdminUserField } from '@/utils/admin-user-validation'
+import { notificationMenuName, resolveNotificationRoles, type NotificationRole } from '@/utils/notificationConfig'
 import {
   getAdminUsers,
   createAdminUser,
@@ -241,12 +387,16 @@ import {
   updateRolePermissions,
   deleteRole as deleteAdminRole,
   getAdminAudit,
+  getNotificationConfigs,
+  updateNotificationConfig,
 } from '@/api/admin'
-import type { AdminUser, RolePermission, AdminAudit } from '@/types'
+import { getApprovalConfigListApi, saveApprovalConfigApi, deleteApprovalConfigApi } from '@/api/exception'
+import type { ExceptionApprovalConfigVO } from '@/types/exception'
+import type { AdminUser, RolePermission, AdminAudit, NotificationConfig, PageResult } from '@/types'
 
 const auth = useAuthStore()
 const router = useRouter()
-const activeTab = ref<'users' | 'roles' | 'audit'>('users')
+const activeTab = ref<'users' | 'roles' | 'notificationConfig' | 'audit' | 'approval'>('users')
 
 const roleOptions = [
   { code: 'R00', name: '超级管理员' },
@@ -368,7 +518,7 @@ async function saveUser() {
     }
     ElMessage.success('保存成功')
     userDialogVisible.value = false
-    await loadUsers()
+    await Promise.all([loadUsers(), refreshAudit()])
   } finally {
     userSaving.value = false
   }
@@ -393,7 +543,7 @@ async function enableUser(row: AdminUser) {
   try {
     await changeAdminUserStatus(row.id, true, reason)
     ElMessage.success('已启用')
-    await loadUsers()
+    await Promise.all([loadUsers(), refreshAudit()])
   } catch (error) {
     if (!isMissingRoleError(error)) throw error
     roleReplacementUser.value = row
@@ -407,14 +557,14 @@ async function disableUser(row: AdminUser) {
   if (!reason) return
   await changeAdminUserStatus(row.id, false, reason)
   ElMessage.success('已停用')
-  await loadUsers()
+  await Promise.all([loadUsers(), refreshAudit()])
 }
 async function unlockUser(row: AdminUser) {
   const reason = await promptRequiredReason('解锁账号', '解锁原因')
   if (!reason) return
   await unlockAdminUser(row.id, reason)
   ElMessage.success('已解锁')
-  await loadUsers()
+  await Promise.all([loadUsers(), refreshAudit()])
 }
 async function resetPassword(row: AdminUser) {
   let password: string | null = null
@@ -434,6 +584,7 @@ async function resetPassword(row: AdminUser) {
   if (!reason || !password) return
   await resetAdminUserPassword(row.id, password, reason)
   ElMessage.success('密码已重置')
+  await refreshAudit()
 }
 async function replaceRoleAndEnable() {
   const user = roleReplacementUser.value
@@ -461,7 +612,7 @@ async function replaceRoleAndEnable() {
     await changeAdminUserStatus(user.id, true, reason)
     ElMessage.success('角色已更换，账号已启用')
     roleReplacementVisible.value = false
-    await loadUsers()
+    await Promise.all([loadUsers(), refreshAudit()])
   } finally {
     roleReplacementSaving.value = false
   }
@@ -609,7 +760,7 @@ async function saveRole() {
       })
       ElMessage.success('角色已创建')
       roleDialogVisible.value = false
-      await loadRoles()
+      await Promise.all([loadRoles(), refreshAudit()])
       return
     }
     if (!editingRole.value) return
@@ -622,7 +773,7 @@ async function saveRole() {
     if (await endSessionAfterOwnRoleUpdate(editingRole.value.roleCode)) return
     ElMessage.success('权限已更新')
     roleDialogVisible.value = false
-    await loadRoles()
+    await Promise.all([loadRoles(), refreshAudit()])
   } finally {
     roleSaving.value = false
   }
@@ -648,7 +799,7 @@ async function removeRole(role: RolePermission) {
   }
   await deleteAdminRole(role.roleCode, reason.trim())
   ElMessage.success('角色已删除')
-  await Promise.all([loadRoles(), loadUsers(), loadAudit()])
+  await Promise.all([loadRoles(), loadUsers(), refreshAudit()])
 }
 async function loadRoles() {
   rolesLoading.value = true
@@ -663,13 +814,143 @@ async function loadRoles() {
 // ── 审计日志 ──
 const audits = ref<AdminAudit[]>([])
 const auditLoading = ref(false)
+const auditPage = ref(1)
+const auditPageSize = 10
+const auditTotal = ref(0)
 async function loadAudit() {
   auditLoading.value = true
   try {
-    const res = await getAdminAudit()
-    audits.value = res.data || []
+    const res = await getAdminAudit({ page: auditPage.value, size: auditPageSize })
+    const result = res.data as PageResult<AdminAudit>
+    audits.value = (result?.list || []).map((audit) => ({ ...audit, afterData: auditContent(audit) }))
+    auditTotal.value = result?.total || 0
   } finally {
     auditLoading.value = false
+  }
+}
+
+// ── 通知配置 ──
+const notificationConfigs = ref<NotificationConfig[]>([])
+const notificationConfigLoading = ref(false)
+const notificationConfigDialogVisible = ref(false)
+const notificationConfigSaving = ref(false)
+const notificationConfigStatusChanging = ref<number | null>(null)
+const notificationRoleDrawerVisible = ref(false)
+const notificationRoleDrawerTitle = ref('角色详情')
+const notificationRoleDrawerRoles = ref<NotificationRole[]>([])
+const editingNotificationConfig = ref<NotificationConfig | null>(null)
+const notificationConfigForm = reactive({
+  roleCodes: [] as string[],
+  severityExtraRoles: [] as string[],
+  enabled: 1,
+  reason: '',
+})
+
+function notificationRoles(raw: string | undefined): NotificationRole[] {
+  return resolveNotificationRoles(raw, roleChoices.value)
+}
+
+async function refreshAudit() {
+  auditPage.value = 1
+  await loadAudit()
+}
+
+function notificationRoleSummary(raw: string | undefined): string {
+  const items = notificationRoles(raw)
+  return items.length ? items.map((role) => role.name).join('、') : '—'
+}
+
+function openNotificationRoleDrawer(title: string, raw: string | undefined) {
+  notificationRoleDrawerTitle.value = title
+  notificationRoleDrawerRoles.value = notificationRoles(raw)
+  notificationRoleDrawerVisible.value = true
+}
+
+async function loadNotificationConfigs() {
+  notificationConfigLoading.value = true
+  try {
+    const res = await getNotificationConfigs()
+    notificationConfigs.value = res.data || []
+  } catch (e: any) {
+    notificationConfigs.value = []
+    ElMessage.error(e?.response?.data?.message || '加载通知配置失败')
+  } finally {
+    notificationConfigLoading.value = false
+  }
+}
+
+function openNotificationConfigDialog(row: NotificationConfig) {
+  editingNotificationConfig.value = row
+  notificationConfigForm.roleCodes = safeParseArr(row.roleCodes)
+  notificationConfigForm.severityExtraRoles = safeParseArr(row.severityExtraRoles)
+  notificationConfigForm.enabled = row.enabled
+  notificationConfigForm.reason = ''
+  notificationConfigDialogVisible.value = true
+}
+
+function safeParseArr(raw: string | undefined): string[] {
+  if (!raw) return []
+  try { return JSON.parse(raw) as string[] } catch { return [] }
+}
+
+function resetNotificationConfigForm() {
+  editingNotificationConfig.value = null
+  notificationConfigForm.roleCodes = []
+  notificationConfigForm.severityExtraRoles = []
+  notificationConfigForm.enabled = 1
+  notificationConfigForm.reason = ''
+}
+
+async function saveNotificationConfig() {
+  if (!editingNotificationConfig.value) return
+  if (!notificationConfigForm.reason.trim()) {
+    ElMessage.warning('请填写修改原因')
+    return
+  }
+  if (notificationConfigForm.roleCodes.length === 0) {
+    ElMessage.warning('至少选择一个接收角色')
+    return
+  }
+  notificationConfigSaving.value = true
+  try {
+    const row = editingNotificationConfig.value
+    await updateNotificationConfig(row.id, {
+      roleCodes: JSON.stringify(notificationConfigForm.roleCodes),
+      severityExtraRoles: row.scenarioCode === 'EXCEPTION_CREATED' ? JSON.stringify(notificationConfigForm.severityExtraRoles) : null,
+      enabled: notificationConfigForm.enabled,
+      version: row.version,
+      reason: notificationConfigForm.reason,
+    })
+    ElMessage.success('通知配置已更新')
+    notificationConfigDialogVisible.value = false
+    await Promise.all([loadNotificationConfigs(), refreshAudit()])
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '更新失败')
+  } finally {
+    notificationConfigSaving.value = false
+  }
+}
+
+async function changeNotificationConfigStatus(row: NotificationConfig) {
+  const shouldEnable = row.enabled !== 1
+  const action = shouldEnable ? '启用' : '停用'
+  const reason = await promptRequiredReason(`${action}通知配置`, `${action}原因`)
+  if (!reason) return
+  notificationConfigStatusChanging.value = row.id
+  try {
+    await updateNotificationConfig(row.id, {
+      roleCodes: row.roleCodes,
+      severityExtraRoles: row.severityExtraRoles || null,
+      enabled: shouldEnable ? 1 : 0,
+      version: row.version,
+      reason,
+    })
+    ElMessage.success(`通知配置已${action}`)
+    await Promise.all([loadNotificationConfigs(), refreshAudit()])
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || `${action}失败`)
+  } finally {
+    notificationConfigStatusChanging.value = null
   }
 }
 
@@ -677,7 +958,162 @@ onMounted(() => {
   loadUsers()
   loadRoles()
   loadAudit()
+  loadNotificationConfigs()
+  loadApprovalConfigs()
 })
+
+// ── 审批配置 ──
+const STAGE_OPTIONS = {
+  '8D': [
+    { value: 'D0', label: 'D0 准备' },
+    { value: 'D1', label: 'D1 组建团队' },
+    { value: 'D2', label: 'D2 问题描述' },
+    { value: 'D3', label: 'D3 临时措施' },
+    { value: 'D4', label: 'D4 根因分析' },
+    { value: 'D5', label: 'D5 永久措施' },
+    { value: 'D6', label: 'D6 措施验证' },
+    { value: 'D7', label: 'D7 预防再发' },
+    { value: 'D8', label: 'D8 表彰结案' },
+  ],
+  CAPA: [
+    { value: 'C1', label: 'C1 问题确认' },
+    { value: 'C2', label: 'C2 原因分析' },
+    { value: 'C3', label: 'C3 措施制定' },
+    { value: 'C4', label: 'C4 验证结案' },
+  ],
+}
+const APPROVER_ROLE_LABELS: Record<string, string> = {
+  R04: '质量工程师',
+  R06: '质量经理',
+}
+function approverRoleLabel(raw: string | undefined): string {
+  if (!raw) return '—'
+  return raw
+    .split(',')
+    .map((code) => APPROVER_ROLE_LABELS[code.trim()] || code.trim())
+    .filter(Boolean)
+    .join('、') || '—'
+}
+const approvalFlow = ref<'8D' | 'CAPA'>('8D')
+const approvalConfigs = ref<ExceptionApprovalConfigVO[]>([])
+const approvalLoading = ref(false)
+const configDialogVisible = ref(false)
+const configSaving = ref(false)
+const configDeleting = ref<number | null>(null)
+const configFormRef = ref()
+const editingConfig = ref<ExceptionApprovalConfigVO | null>(null)
+const configForm = reactive<{
+  id?: number
+  processFlow: string
+  stage: string
+  stageName: string
+  needApproval: number
+  approverRole: string[]
+}>({
+  id: undefined,
+  processFlow: '8D',
+  stage: '',
+  stageName: '',
+  needApproval: 1,
+  approverRole: [],
+})
+const configFormRules = {
+  stage: [{ required: true, message: '请选择阶段', trigger: 'change' }],
+  stageName: [{ required: true, message: '请输入阶段名称', trigger: 'blur' }],
+}
+const currentStageOptions = computed(() => STAGE_OPTIONS[approvalFlow.value] || [])
+function resetConfigForm() {
+  editingConfig.value = null
+  configForm.id = undefined
+  configForm.stage = ''
+  configForm.stageName = ''
+  configForm.needApproval = 1
+  configForm.approverRole = []
+}
+function onFlowChange() {
+  resetConfigForm()
+  loadApprovalConfigs()
+}
+function onStageChange(value: string) {
+  const option = currentStageOptions.value.find((s) => s.value === value)
+  configForm.stageName = option ? option.label : ''
+}
+function openConfigCreate() {
+  resetConfigForm()
+  configForm.processFlow = approvalFlow.value
+  configDialogVisible.value = true
+}
+function openConfigEdit(row: ExceptionApprovalConfigVO) {
+  editingConfig.value = row
+  configForm.id = row.id
+  configForm.processFlow = (row.processFlow as string) || approvalFlow.value
+  configForm.stage = row.stage || ''
+  configForm.stageName = row.stageName || ''
+  configForm.needApproval = row.needApproval === 1 ? 1 : 0
+  configForm.approverRole = row.approverRole
+    ? row.approverRole.split(',').map((code) => code.trim()).filter(Boolean)
+    : []
+  configDialogVisible.value = true
+}
+async function saveConfig() {
+  const payload: Record<string, unknown> = {
+    processFlow: approvalFlow.value,
+    stage: configForm.stage,
+    stageName: configForm.stageName,
+    needApproval: configForm.needApproval,
+    approverRole: configForm.needApproval === 1 ? configForm.approverRole.join(',') : '',
+  }
+  if (editingConfig.value?.id) {
+    payload.id = editingConfig.value.id
+    payload.version = (editingConfig.value as any).version
+  }
+  configSaving.value = true
+  try {
+    await saveApprovalConfigApi(payload as Partial<ExceptionApprovalConfigVO>)
+    ElMessage.success('保存成功')
+    configDialogVisible.value = false
+    await loadApprovalConfigs()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '保存失败')
+  } finally {
+    configSaving.value = false
+  }
+}
+async function removeConfig(row: ExceptionApprovalConfigVO) {
+  if (!row.id) return
+  try {
+    await ElMessageBox.confirm(`确认删除「${row.stageName || row.stage}」的审批配置？`, '删除确认', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch (error) {
+    if (isDialogCancellation(error)) return
+    throw error
+  }
+  configDeleting.value = row.id
+  try {
+    await deleteApprovalConfigApi(row.id)
+    ElMessage.success('已删除')
+    await loadApprovalConfigs()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '删除失败')
+  } finally {
+    configDeleting.value = null
+  }
+}
+async function loadApprovalConfigs() {
+  approvalLoading.value = true
+  try {
+    const res = await getApprovalConfigListApi(approvalFlow.value)
+    approvalConfigs.value = res.data || []
+  } catch (e: any) {
+    approvalConfigs.value = []
+    ElMessage.error(e?.response?.data?.message || '加载审批配置失败')
+  } finally {
+    approvalLoading.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -746,5 +1182,23 @@ onMounted(() => {
 }
 .permission-detail-action {
   margin-right: 8px;
+}
+.text-muted {
+  color: #c0c4cc;
+}
+.audit-pagination {
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+.approval-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.config-hint {
+  margin: 0 0 14px;
+  color: #909399;
+  font-size: 13px;
 }
 </style>

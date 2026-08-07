@@ -15,7 +15,7 @@
           </span>
         </template>
       </el-table-column>
-      <el-table-column prop="verifierName" label="验证人" width="90" />
+      <el-table-column prop="verifierName" label="验证人（质量审核人员）" min-width="130" />
       <el-table-column prop="verifyDate" label="验证日期" width="110" />
       <el-table-column prop="evidence" label="验证证据" min-width="120" show-overflow-tooltip />
       <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
@@ -43,10 +43,7 @@
           </el-radio-group>
         </el-form-item>
         <el-form-item label="验证人">
-          <el-input v-model="form.verifierName" placeholder="请输入验证人姓名" />
-        </el-form-item>
-        <el-form-item label="验证人ID">
-          <el-input-number v-model="form.verifierId" :min="1" controls-position="right" style="width: 100%" />
+          <el-input :model-value="authStore.user?.realName || '—'" disabled placeholder="当前登录用户" />
         </el-form-item>
         <el-form-item label="验证日期">
           <el-date-picker v-model="form.verifyDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
@@ -75,6 +72,7 @@ import {
   updateVerificationRecordApi,
   deleteVerificationRecordApi,
 } from '@/api/verification-record'
+import { useAuthStore } from '@/stores/auth'
 import { VERIFY_RESULT_COLORS } from '@/enums/exception'
 import type { VerificationRecord } from '@/types/exception'
 
@@ -88,6 +86,7 @@ const emit = defineEmits<{
   (e: 'changed'): void
 }>()
 
+const authStore = useAuthStore()
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const submitLoading = ref(false)
@@ -115,14 +114,19 @@ function openForm(row?: VerificationRecord) {
       exceptionId: props.exceptionId,
       verifyType: row.verifyType,
       result: row.result as '通过' | '不通过',
-      verifierId: row.verifierId,
-      verifierName: row.verifierName || '',
+      verifierId: authStore.user?.userId,  // 验证人始终使用当前登录用户
+      verifierName: authStore.user?.realName || '',
       verifyDate: row.verifyDate || '',
       evidence: row.evidence || '',
       remark: row.remark || '',
     }
   } else {
-    form.value = { ...defaultForm, exceptionId: props.exceptionId }
+    form.value = {
+      ...defaultForm,
+      exceptionId: props.exceptionId,
+      verifierId: authStore.user?.userId,   // 验证人自动设置为当前登录用户
+      verifierName: authStore.user?.realName || '',
+    }
   }
   dialogVisible.value = true
 }

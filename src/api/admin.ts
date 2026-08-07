@@ -1,5 +1,5 @@
 import { apiDelete, apiGet, apiPost, apiPut } from './request'
-import type { AdminAudit, AdminUser, RolePermission } from '@/types'
+import type { AdminAudit, AdminUser, NotificationConfig, PageResult, RolePermission } from '@/types'
 
 export const getAdminUsers = () => apiGet<AdminUser[]>('/admin/users')
 export const createAdminUser = (data: Record<string, unknown>) => apiPost<AdminUser>('/admin/users', data)
@@ -11,4 +11,6 @@ export const getRoles = () => apiGet<RolePermission[]>('/admin/roles')
 export const createRole = (data: { roleName: string; description?: string; dataScope: string; permissions: string[]; reason: string }) => apiPost<RolePermission>('/admin/roles', data)
 export const updateRolePermissions = (roleCode: string, data: { dataScope: string; permissions: string[]; reason: string; version: number }) => apiPut<RolePermission>(`/admin/roles/${roleCode}/permissions`, data)
 export const deleteRole = (roleCode: string, reason: string) => apiDelete<null>(`/admin/roles/${roleCode}`, { data: { reason } })
-export const getAdminAudit = () => apiGet<AdminAudit[]>('/admin/audit')
+export const getAdminAudit = (params: { page: number; size: number }) => apiGet<PageResult<AdminAudit>>('/admin/audit', { params })
+export const getNotificationConfigs = () => apiGet<NotificationConfig[]>('/admin/notification-config')
+export const updateNotificationConfig = (id: number, data: Record<string, unknown>) => apiPut<NotificationConfig>(`/admin/notification-config/${id}`, data)

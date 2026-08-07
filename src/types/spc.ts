@@ -10,11 +10,14 @@ export interface SpcProcess {
   processName: string
   description?: string
   sortOrder?: number
+  isActive?: string
+  changeRemark?: string
   plantCode: string
   plantName: string
+  version?: number
 }
 
-/** 关键参数定义 */
+/** 关键参数定义（完整字段；字典层表单仅编辑基础字段，USL/LSL/n/控制图归标准层） */
 export interface SpcParameter {
   id: number
   processId: number
@@ -28,8 +31,12 @@ export interface SpcParameter {
   subgroupSize: number
   chartType: string // 'Xbar-R' | 'Xbar-s'
   isActive?: string
+  decimalPlaces?: number
+  isCritical?: string
+  changeRemark?: string
   plantCode: string
   plantName: string
+  version?: number
 }
 
 /** 采样明细 */
@@ -103,6 +110,25 @@ export interface SpcChartData {
   sUcl?: number | null
   sCl?: number | null
   sLcl?: number | null
+  /** 当前可用的批次列表（去重，用于前端批次筛选下拉） */
+  availableBatches?: string[]
+  /** 过程能力指数 */
+  cp?: number
+  cpk?: number
+  pp?: number
+  ppk?: number
+  sigmaWithin?: number
+  sigmaOverall?: number
+
+  // ─── 规格限（从 FAI 检验标准层解析，非参数字典回填；未选产品/物料时为 null） ───
+  /** 规格上限 USL */
+  upperSpecLimit?: number | null
+  /** 规格下限 LSL */
+  lowerSpecLimit?: number | null
+  /** 目标值 */
+  targetValue?: number | null
+  /** 子组大小 n */
+  subgroupSize?: number | null
 }
 
 /** 过程能力指数响应 */
@@ -117,6 +143,16 @@ export interface SpcCapabilityResult {
   sampleCount?: number | null
   subgroupCount?: number | null
   judgment?: string | null
+
+  // ─── 规格限（从 FAI 检验标准层解析，非参数字典回填；未选产品/物料时为 null） ───
+  /** 规格上限 USL */
+  upperSpecLimit?: number | null
+  /** 规格下限 LSL */
+  lowerSpecLimit?: number | null
+  /** 目标值 */
+  targetValue?: number | null
+  /** 子组大小 n */
+  subgroupSize?: number | null
 }
 
 /** 可联动首件记录 */
@@ -137,22 +173,22 @@ export interface SpcProcessRequest {
   processName: string
   description?: string
   sortOrder?: number
+  isActive?: string
+  changeRemark?: string
   version?: number
 }
 
-/** 参数创建/更新请求 */
+/** 参数创建/更新请求（字典层） */
 export interface SpcParameterRequest {
   processId: number
   paramCode: string
   paramName: string
   paramType?: string
   unit?: string
-  upperSpecLimit?: number | null
-  lowerSpecLimit?: number | null
-  targetValue?: number | null
-  subgroupSize: number
-  chartType: string
   isActive?: string
+  decimalPlaces?: number
+  isCritical?: string
+  changeRemark?: string
   version?: number
 }
 
@@ -165,6 +201,12 @@ export interface SpcSubgroupSaveRequest {
   itemType?: 'PRODUCT' | 'MATERIAL'
   /** 产品/物料代码（随 itemType 取值，控制图关联维度） */
   itemCode?: string
+  /** 批次号（手动录入时可填写） */
+  batchNo?: string
+  /** 条码（追溯标识，手动录入时必填） */
+  barcode?: string
+  /** 产品/物料名称（手动录入时可填写） */
+  materialName?: string
 }
 
 /** 首件导入请求 */

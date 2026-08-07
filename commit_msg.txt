@@ -1,0 +1,8 @@
+feat(incoming): 趋势图与排名改用"数值+单位"控件，切换单位自动重置默认值
+
+- 替换 el-date-picker(daterange) 为 el-input-number + el-select(天/月)
+- 趋势卡：TopN 选择 + 数值输入（天≤31/月≤12），截止日期固定为今日
+- 排名卡：同样的数值+单位控件
+- 切换单位时自动重置数值（天→30，月→12），避免旧值超出新上限
+- computeDateRange 统一计算起止日期
+- TrendChart 扩展 20 色调色板 + notMerge 防止残留系列

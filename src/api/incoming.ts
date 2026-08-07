@@ -4,17 +4,12 @@
  * 路径前缀：/api/v1/material-inspections
  * 严格对齐 MaterialInspectionController 接口契约。
  */
-import service, { apiGet, apiPost, apiPut, apiDelete } from './request'
-import type { AxiosResponse } from 'axios'
+import { apiGet, apiPost, apiPut, apiDelete } from './request'
 import type { ApiResult, PageResult } from '@/types'
 import type {
   MaterialInspection,
   MaterialInspectionStats,
   MaterialInspectionListParams,
-  MaterialInspectionImportDTO,
-  MaterialInspectionImportResultVO,
-  MaterialInspectionImportPreviewVO,
-  MaterialInspectionReconcileResultVO,
   KeySupplierTrend,
   SupplierRankItem,
 } from '@/types/incoming'
@@ -71,6 +66,8 @@ export interface CreateBindingParams {
   materialBarcode: string
   materialCode?: string
   materialName?: string
+  /** 子项批号（半成品绑定必填，详情展示用，不影响追溯链路） */
+  sonLotNo?: string
   specModel?: string
   workOrderNo?: string
   workOrderQty?: number
@@ -115,33 +112,5 @@ export function updateMaterialInspectionApi(
 /** 逻辑删除物料检验记录 */
 export function deleteMaterialInspectionApi(id: number): Promise<ApiResult<void>> {
   return apiDelete<void>(`${BASE}/${id}`)
-}
-
-/** 批量导入物料检验记录 */
-export function importMaterialInspectionApi(
-  data: MaterialInspectionImportDTO,
-): Promise<ApiResult<MaterialInspectionImportResultVO>> {
-  return apiPost<MaterialInspectionImportResultVO>(`${BASE}/import`, data)
-}
-
-/** 手动对账（扫描不合格未关联异常单的记录并自动建单） */
-export function reconcileMaterialInspectionApi(params?: {
-  startDate?: string
-  endDate?: string
-  plantCode?: string
-}): Promise<ApiResult<MaterialInspectionReconcileResultVO>> {
-  return apiPost<MaterialInspectionReconcileResultVO>(`${BASE}/reconcile`, null, { params })
-}
-
-/** 导入预览：解析 Excel 并逐行校验（不落库），返回可导入列表与失败明细 */
-export function previewImportApi(file: File): Promise<ApiResult<MaterialInspectionImportPreviewVO>> {
-  const form = new FormData()
-  form.append('file', file)
-  return service.post<ApiResult<MaterialInspectionImportPreviewVO>>(`${BASE}/import/preview`, form) as unknown as Promise<ApiResult<MaterialInspectionImportPreviewVO>>
-}
-
-/** 下载来料检验导入 Excel 模板（二进制流） */
-export function downloadTemplateApi(): Promise<AxiosResponse<Blob>> {
-  return service.get(`${BASE}/import/template`, { responseType: 'blob' }) as unknown as Promise<AxiosResponse<Blob>>
 }
 

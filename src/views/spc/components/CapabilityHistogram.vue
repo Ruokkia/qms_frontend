@@ -43,10 +43,11 @@ const hasData = computed(() => values.value.length > 0)
 
 const param = computed(() => store.parameterList.find((p) => p.id === props.paramId) || null)
 const unit = computed(() => param.value?.unit || '')
-const usl = computed(() => (param.value?.upperSpecLimit == null ? null : Number(param.value.upperSpecLimit)))
-const lsl = computed(() => (param.value?.lowerSpecLimit == null ? null : Number(param.value.lowerSpecLimit)))
-const target = computed(() => (param.value?.targetValue == null ? null : Number(param.value.targetValue)))
-const subgroupSize = computed(() => param.value?.subgroupSize ?? 0)
+// 规格限：从 store.capabilityResult（FAI 标准层解析结果），未选产品时为 null → 不展示规格线
+const usl = computed(() => (cap.value?.upperSpecLimit == null ? null : Number(cap.value.upperSpecLimit)))
+const lsl = computed(() => (cap.value?.lowerSpecLimit == null ? null : Number(cap.value.lowerSpecLimit)))
+const target = computed(() => (cap.value?.targetValue == null ? null : Number(cap.value.targetValue)))
+const subgroupSize = computed(() => cap.value?.subgroupSize ?? param.value?.subgroupSize ?? 0)
 const subgroupCount = computed(() => (props.paramId ? store.subgroupList.length : 0))
 
 function n(v: number | null | undefined): number | null {
@@ -61,15 +62,6 @@ const judgeClass = computed(() => {
   if (j.includes('不足')) return 'judge bad'
   return 'judge warn'
 })
-
-function initChart() {
-  if (!chartRef.value) return
-  chart = echarts.init(chartRef.value)
-  ro = new ResizeObserver(() => {
-    if (chart && chartRef.value && chartRef.value.clientWidth > 0) chart.resize()
-  })
-  ro.observe(chartRef.value)
-}
 
 function handleResize() {
   chart?.resize()
@@ -202,7 +194,7 @@ function render() {
                 width: half * 2,
                 height: Math.max(0, base[1] - pt[1]),
               },
-              style: api.style({ fill: '#5B7A99' }),
+              style: { fill: '#5B7A99' },
             }
           },
           encode: { x: 0, y: 1 },
@@ -238,14 +230,17 @@ watch(
   () => props.paramId,
   () => load(),
 )
-onMounted(() => {
+function initChart() {
+  if (!chartRef.value || chart) return
   chart = echarts.init(chartRef.value!)
   ro = new ResizeObserver(() => {
+    // 仅当容器可见（宽度>0）时 resize，避免隐藏 Tab 内的 0 尺寸容器触发无限重渲染
     if (chart && chartRef.value && chartRef.value.clientWidth > 0) chart.resize()
   })
   ro.observe(chartRef.value!)
   load()
-})
+}
+onMounted(() => { initChart() })
 onUnmounted(() => {
   ro?.disconnect()
   window.removeEventListener('resize', handleResize)

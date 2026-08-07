@@ -5,7 +5,7 @@
         <el-form-item label="首件编号">
           <el-input v-model="filters.faiNo" placeholder="编号/模糊" clearable style="width: 160px" />
         </el-form-item>
-        <el-form-item label="物料名称">
+        <el-form-item :label="nameLabel">
           <el-input v-model="filters.materialName" placeholder="模糊" clearable style="width: 150px" />
         </el-form-item>
         <el-form-item label="批次号">
@@ -18,9 +18,18 @@
       </el-form>
     </div>
 
-    <el-table :data="store.inspectionList" v-loading="store.loading" border stripe height="400">
+    <el-table :data="list" v-loading="loading" border stripe height="400">
       <el-table-column prop="faiNo" label="首件编号" width="190" />
-      <el-table-column prop="materialName" label="物料名称" min-width="140" />
+      <el-table-column :label="nameLabel" prop="itemName" min-width="140">
+        <template #default="{ row }">
+          {{ row.itemName || row.materialName || '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column :label="codeLabel" prop="itemCode" width="130">
+        <template #default="{ row }">
+          {{ row.itemCode || row.materialCode || '-' }}
+        </template>
+      </el-table-column>
       <el-table-column prop="batchNo" label="批次号" width="130" />
       <el-table-column prop="processName" label="工序" width="90" />
       <el-table-column label="判定结果" width="100">
@@ -28,16 +37,33 @@
           <el-tag :type="resultTag(row.inspectionResult)" effect="light">{{ row.inspectionResult }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="签名状态" width="90">
+      <el-table-column label="签名状态" width="110">
         <template #default="{ row }">
           <el-tag :type="row.signatureStatus === '已签' ? 'success' : 'info'" effect="plain">
             {{ row.signatureStatus }}
           </el-tag>
+          <div v-if="row.signatureStatus === '已签' && row.legacySignature" style="margin-top:2px">
+            <el-tooltip content="历史遗留签名未绑定内容哈希，无法做完整性复核（按祖父条款认可），建议重新签字" placement="top">
+              <el-tag type="info" size="small" effect="plain">历史遗留·需复核</el-tag>
+            </el-tooltip>
+          </div>
+          <div v-else-if="row.signatureStatus === '已签' && row.signatureIntact === false" style="margin-top:2px">
+            <el-tooltip content="电子签名完整性校验未通过（疑似内容被篡改），请勿采信该记录" placement="top">
+              <el-tag type="danger" size="small" effect="plain">完整性异常</el-tag>
+            </el-tooltip>
+          </div>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="100" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link :icon="Document" @click="openReport(row.id)">查看报告</el-button>
+          <el-tooltip
+            v-if="row.signatureStatus !== '已签'"
+            content="未完成电子签名，不可查看完整报告"
+            placement="top"
+          >
+            <el-button type="primary" link :icon="Document" disabled>查看报告</el-button>
+          </el-tooltip>
+          <el-button v-else type="primary" link :icon="Document" @click="openReport(row.id)">查看报告</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -49,7 +75,12 @@
 
         <el-descriptions :column="2" border size="small" class="block-alert">
           <el-descriptions-item label="首件编号">{{ report.faiNo }}</el-descriptions-item>
-          <el-descriptions-item label="物料名称">{{ report.materialName || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="`${reportTypeLabel}名称`">
+            {{ report.itemName || report.materialName || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item :label="`${reportTypeLabel}代码`">
+            {{ report.itemCode || report.materialCode || '-' }}
+          </el-descriptions-item>
           <el-descriptions-item label="批次号">{{ report.batchNo || '-' }}</el-descriptions-item>
           <el-descriptions-item label="工序">{{ report.processName || '-' }}</el-descriptions-item>
           <el-descriptions-item label="创建人">{{ report.createdBy || '-' }}</el-descriptions-item>
@@ -95,14 +126,25 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, reactive, ref, inject, watch, type Ref } from 'vue'
 import { Search, RefreshLeft, Document } from '@element-plus/icons-vue'
-import { useFaiStore } from '@/stores/fai'
-import { getInspectionReportApi, getSpcBaselineApi } from '@/api/fai'
+import { getInspectionsApi, getInspectionReportApi, getSpcBaselineApi } from '@/api/fai'
 import InspectionResult from './InspectionResult.vue'
-import type { FaiReportResponse, FaiSpcBaselineVO } from '@/types/fai'
+import type { FaiInspectionRecord, FaiReportResponse, FaiSpcBaselineVO } from '@/types/fai'
+import type { ItemType } from '@/stores/itemType'
 
-const store = useFaiStore()
+// 历史报告使用本地 state，避免与“首件检验执行”tab 共享 store.inspectionList 造成竞态（切换分类时并发请求互相覆盖）
+const list = ref<FaiInspectionRecord[]>([])
+const loading = ref(false)
+// 强制二选一且持久化，恒为 PRODUCT/MATERIAL
+const faiItemType = inject<Ref<ItemType>>('faiItemType', ref<ItemType>('PRODUCT'))
+
+// 列头/筛选标签随分类精确切换
+const typeLabel = computed(() => (faiItemType.value === 'PRODUCT' ? '产品' : '物料'))
+const nameLabel = computed(() => `${typeLabel.value}名称`)
+const codeLabel = computed(() => `${typeLabel.value}代码`)
+// 详情弹窗取报告自身分类，保证与该单据真实类型一致
+const reportTypeLabel = computed(() => (report.value?.itemType === 'PRODUCT' ? '产品' : '物料'))
 const filters = reactive({
   faiNo: '',
   materialName: '',
@@ -119,9 +161,19 @@ function resultTag(r: string) {
   return 'warning'
 }
 
+// 历史报告档案默认仅展示已签记录（archiveOnly 由服务端强制：signature_status='已签'；不合格亦可进档案，未签名不进档案）
 async function load() {
-  await store.fetchInspections({ ...filters })
+  loading.value = true
+  try {
+    const res = await getInspectionsApi({ ...filters, archiveOnly: true, itemType: faiItemType.value })
+    list.value = res.data?.list || []
+  } finally {
+    loading.value = false
+  }
 }
+
+// 分类选择器切换时，按 itemType 过滤历史报告
+watch(() => faiItemType.value, () => load())
 
 function reset() {
   filters.faiNo = ''
@@ -140,12 +192,15 @@ async function openReport(id: number) {
     report.value = res.data || null
     const spc = await getSpcBaselineApi(id)
     spcData.value = spc.data || []
+  } catch {
+    // 后端拦截（如未签名记录禁止查看报告）已由请求层统一提示，此处关闭空弹窗即可
+    detailVisible.value = false
   } finally {
     reportLoading.value = false
   }
 }
 
-onMounted(load)
+defineExpose({ load })
 </script>
 
 <style scoped>

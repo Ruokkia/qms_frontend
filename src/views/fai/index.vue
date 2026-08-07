@@ -1,22 +1,20 @@
 <template>
   <div class="page-container">
     <div class="page-card">
-      <!-- 题头 -->
+      <!-- 题头（标题左对齐 + 分类靠右） -->
       <header class="page-header">
         <div class="header-left">
           <h1 class="header-title">首件检验管理</h1>
-          <p class="header-sub">FAI 变更触发 · 检验执行 · 标准维护 · 历史报告 · {{ auth.user?.plantName }}分公司</p>
+          <span class="header-plant">{{ auth.user?.plantName }}分公司</span>
+        </div>
+        <div class="fai-item-type-inline">
+          <span class="fai-item-type__label">分类</span>
+          <el-radio-group :model-value="faiItemType" @update:model-value="onItemTypeChange" size="small">
+            <el-radio-button value="PRODUCT">产品</el-radio-button>
+            <el-radio-button value="MATERIAL">物料</el-radio-button>
+          </el-radio-group>
         </div>
       </header>
-
-      <!-- 全局分类选择器：强制二选一，切换 tab 时保持选中，并持久化继承上次选择 -->
-      <div class="fai-item-type">
-        <span class="fai-item-type__label">分类</span>
-        <el-radio-group :model-value="faiItemType" @update:model-value="onItemTypeChange">
-          <el-radio-button value="PRODUCT">产品</el-radio-button>
-          <el-radio-button value="MATERIAL">物料</el-radio-button>
-        </el-radio-group>
-      </div>
 
       <el-tabs v-model="activeTab" class="fai-tabs">
         <el-tab-pane label="变更触发管理" name="trigger">
@@ -47,7 +45,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, provide, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, provide, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
 import { useItemTypeStore, type ItemType } from '@/stores/itemType'
@@ -59,6 +58,7 @@ import StandardMaintenance from './components/StandardMaintenance.vue'
 
 const auth = useAuthStore()
 const activeTab = ref('trigger')
+provide('activeTab', activeTab)
 // 全局分类（产品/物料）来自共享 store：与 SPC 同源、localStorage 持久化，
 // 进入页面即继承上一次选择，不存在空值分支，从根上消除产品/物料混合展示。
 const itemTypeStore = useItemTypeStore()
@@ -66,6 +66,52 @@ const { itemType: faiItemType } = storeToRefs(itemTypeStore)
 provide('faiItemType', faiItemType)
 // 当前分类中文名，供子组件与本页动态文案使用
 provide('faiItemTypeLabel', computed(() => itemTypeStore.labelOf()))
+
+// 支持从 query 跳转：预选 tab 与分类，并可携带待建标准的代码/名称
+const route = useRoute()
+
+interface PendingStandardCreate {
+  itemType?: ItemType
+  itemCode: string
+  itemName: string
+  processName?: string
+}
+const pendingStandardCreate = ref<PendingStandardCreate | null>(null)
+provide('pendingStandardCreate', pendingStandardCreate)
+
+// 标准维护保存成功后回写的信号（供变更触发自动回填工序并切回 trigger）
+interface StandardSavedResult {
+  itemCode: string
+  processCode: string
+  processName: string
+}
+const standardSavedResult = ref<StandardSavedResult | null>(null)
+provide('standardSavedResult', standardSavedResult)
+watch(standardSavedResult, (val) => {
+  if (val) {
+    // 标准已保存 → 切回「变更触发」并清空信号（ChangeTriggerForm 会消费回填工序）
+    activeTab.value = 'trigger'
+    standardSavedResult.value = null
+  }
+})
+
+onMounted(() => {
+  const q = route.query
+  if (q.itemType === 'PRODUCT' || q.itemType === 'MATERIAL') {
+    itemTypeStore.setItemType(q.itemType as ItemType)
+  }
+  const validTabs = ['trigger', 'inspect', 'standard', 'report']
+  if (q.tab && validTabs.includes(q.tab as string)) {
+    activeTab.value = q.tab as string
+  }
+  // 变更触发「去检验标准维护新建」携带代码/名称 → 待 StandardMaintenance 消费后自动打开新建弹窗
+  if (q.itemCode) {
+    pendingStandardCreate.value = {
+      itemCode: q.itemCode as string,
+      itemName: (q.itemName as string) || '',
+    }
+  }
+})
 
 function onItemTypeChange(val: string | number | boolean | undefined) {
   itemTypeStore.setItemType(val as ItemType)
@@ -104,26 +150,43 @@ function onInspectUpdated() {
 </script>
 
 <style scoped>
-/* ── 题头 ── */
+/* ── 题头（标题左对齐 + 分类靠右） ── */
 .page-header {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
-  padding-bottom: 16px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
   border-bottom: 1px solid #edf0f4;
 }
+.header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
 .header-title {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 600;
-  margin: 0 0 4px;
+  margin: 0;
   color: #1b3a5b;
 }
-.header-sub {
+.header-plant {
   font-size: 12px;
   color: #8c9ba8;
-  margin: 0;
 }
+/* ── 分类选择器（顶栏右侧） ── */
+.fai-item-type-inline {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fai-item-type__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #5b7a99;
+}
+/* ── 页卡 / Tab ── */
 .page-card {
   background: #fff;
   border-radius: 8px;
@@ -131,18 +194,7 @@ function onInspectUpdated() {
   padding: 20px;
 }
 .fai-tabs :deep(.el-tabs__header) {
-  margin-bottom: 18px;
-}
-.fai-item-type {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-.fai-item-type__label {
-  font-size: 13px;
-  font-weight: 500;
-  color: #5b7a99;
+  margin-bottom: 16px;
 }
 .fai-tabs :deep(.el-tabs__item) {
   font-weight: 600;

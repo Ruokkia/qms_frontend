@@ -8,7 +8,7 @@ import type { NodeTypeEnum, IqcStatusEnum, InspectionResultEnum } from '@/enums/
 
 /** 追溯节点（对齐 m0-2 响应） */
 export interface TraceNode {
-  /** 节点ID（复合字符串 "fg_123"/"mi_456" 或旧数字ID） */
+  /** 节点ID（复合字符串 "fg:ABC"/"mi:ABC" 或旧数字ID "fg_123"/"mi_456"） */
   id: string | number
   /** 节点类型：SN/部件/关键物料/非关键物料/来料批次/生产批次 */
   nodeType: string
@@ -38,10 +38,12 @@ export interface TraceNode {
   plantCode?: string
   /** 层级（根=1） */
   level?: number
-  /** 完整路径（如 SN001 > M001 > MC-001） */
+  /** 完整路径（如 VU260711 > 99.11.100558 > 99.11.100558） */
   path?: string
   /** 关联批次信息（树查询时填充） */
   batchInfo?: TraceBatchInfo | null
+  /** 子项批号（半成品节点专属，详情查询用，不影响追溯链路） */
+  sonLotNo?: string | null
   /** 子节点（树结构） */
   children?: TraceNode[]
 }

@@ -21,6 +21,11 @@
             <el-table-column prop="processCode" label="编码" width="90" />
             <el-table-column prop="processName" label="工序" width="90" />
             <el-table-column prop="description" label="描述" show-overflow-tooltip />
+            <el-table-column prop="isActive" label="状态" width="60">
+              <template #default="{ row }">
+                <el-tag :type="row.isActive === '否' ? 'info' : 'success'" size="small">{{ row.isActive === '否' ? '停用' : '启用' }}</el-tag>
+              </template>
+            </el-table-column>
             <el-table-column label="操作" width="110" fixed="right">
               <template #default="{ row }">
                 <el-button link type="primary" size="small" @click.stop="openProcessDialog(row)">编辑</el-button>
@@ -56,13 +61,17 @@
             <el-table-column prop="paramCode" label="参数编码" width="100" />
             <el-table-column prop="paramName" label="参数名称" width="110" />
             <el-table-column prop="paramType" label="类型" width="70" />
-            <el-table-column label="USL/LSL" width="150">
+            <el-table-column prop="unit" label="单位" width="60" />
+            <el-table-column prop="decimalPlaces" label="小数位" width="70">
               <template #default="{ row }">
-                <span class="num">{{ fmt(row.upperSpecLimit) }} / {{ fmt(row.lowerSpecLimit) }}</span>
+                <span>{{ row.decimalPlaces != null ? row.decimalPlaces : '-' }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="subgroupSize" label="n" width="50" />
-            <el-table-column prop="chartType" label="控制图" width="80" />
+            <el-table-column prop="isCritical" label="关键特性" width="85">
+              <template #default="{ row }">
+                <el-tag :type="row.isCritical === '是' ? 'danger' : 'info'" size="small">{{ row.isCritical === '是' ? '是' : '否' }}</el-tag>
+              </template>
+            </el-table-column>
             <el-table-column label="操作" width="110" fixed="right">
               <template #default="{ row }">
                 <el-button link type="primary" size="small" @click.stop="openParamDialog(row)">编辑</el-button>
@@ -79,33 +88,28 @@
     </el-row>
 
     <!-- 工序表单弹窗 -->
-    <el-dialog v-model="processVisible" :title="processForm.id ? '编辑工序' : '新增工序'" width="420px">
+    <el-dialog v-model="processVisible" :title="processForm.id ? '编辑工序' : '新增工序'" width="460px">
       <el-form :model="processForm" label-width="80px" ref="processFormRef">
         <el-form-item label="工序编码" required>
           <el-input v-model="processForm.processCode" placeholder="如 ASM / WDG / INS" />
         </el-form-item>
         <el-form-item label="工序名称" required>
-          <el-select
-            v-model="processForm.processName"
-            filterable
-            allow-create
-            default-first-option
-            placeholder="选择或输入工序名称"
-            style="width:100%"
-          >
-            <el-option label="装配" value="装配" />
-            <el-option label="焊接" value="焊接" />
-            <el-option label="检测" value="检测" />
-            <el-option label="点胶" value="点胶" />
-            <el-option label="老化" value="老化" />
-            <el-option label="测试" value="测试" />
-            <el-option label="喷涂" value="喷涂" />
-            <el-option label="冲压" value="冲压" />
-            <el-option label="注塑" value="注塑" />
-          </el-select>
+          <el-input v-model="processForm.processName" placeholder="输入工序名称" />
         </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="processForm.description" type="textarea" :rows="2" />
+        </el-form-item>
+        <el-form-item label="启用状态">
+          <el-switch
+            v-model="processForm.isActive"
+            active-value="是"
+            inactive-value="否"
+            active-text="启用"
+            inactive-text="停用"
+          />
+        </el-form-item>
+        <el-form-item label="变更备注">
+          <el-input v-model="processForm.changeRemark" type="textarea" :rows="2" placeholder="本次变更原因或说明" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -114,7 +118,7 @@
       </template>
     </el-dialog>
 
-    <!-- 参数表单弹窗 -->
+    <!-- 参数表单弹窗（字典层：仅管理参数基础信息；USL/LSL/目标/n/控制图归物料‑工序‑参数标准层配置） -->
     <el-dialog v-model="paramVisible" :title="paramForm.id ? '编辑参数' : '新增参数'" width="520px">
       <el-form :model="paramForm" label-width="96px" ref="paramFormRef">
         <el-form-item label="参数编码" required>
@@ -124,45 +128,56 @@
           <el-input v-model="paramForm.paramName" />
         </el-form-item>
         <el-form-item label="参数类型">
-          <el-select v-model="paramForm.paramType" style="width:100%">
+          <el-select
+            v-model="paramForm.paramType"
+            filterable
+            allow-create
+            default-first-option
+            placeholder="选择或输入参数类型"
+            style="width:100%"
+          >
             <el-option v-for="t in paramTypes" :key="t" :label="t" :value="t" />
           </el-select>
         </el-form-item>
-        <el-form-item label="单位">
-          <el-input v-model="paramForm.unit" placeholder="mm / °C / MPa" />
+        <el-row :gutter="12">
+          <el-col :span="12">
+            <el-form-item label="单位">
+              <el-input v-model="paramForm.unit" placeholder="mm / °C / MPa" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="小数位数">
+              <el-input-number v-model="paramForm.decimalPlaces" :min="0" :max="6" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="12">
+          <el-col :span="12">
+            <el-form-item label="关键特性">
+              <el-switch
+                v-model="paramForm.isCritical"
+                active-value="是"
+                inactive-value="否"
+                active-text="是"
+                inactive-text="否"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="启用状态">
+              <el-switch
+                v-model="paramForm.isActive"
+                active-value="是"
+                inactive-value="否"
+                active-text="启用"
+                inactive-text="停用"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="变更备注">
+          <el-input v-model="paramForm.changeRemark" type="textarea" :rows="2" placeholder="本次变更原因或说明" />
         </el-form-item>
-        <el-row :gutter="12">
-          <el-col :span="8">
-            <el-form-item label="USL" label-width="50px">
-              <el-input-number v-model="paramForm.upperSpecLimit" :controls="false" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="LSL" label-width="50px">
-              <el-input-number v-model="paramForm.lowerSpecLimit" :controls="false" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="目标" label-width="50px">
-              <el-input-number v-model="paramForm.targetValue" :controls="false" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="12">
-          <el-col :span="12">
-            <el-form-item label="子组大小 n" required>
-              <el-input-number v-model="paramForm.subgroupSize" :min="2" :max="12" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="控制图" required>
-              <el-select v-model="paramForm.chartType" style="width:100%">
-                <el-option label="Xbar-R（n=2~10）" value="Xbar-R" />
-                <el-option label="Xbar-s（n≥11）" value="Xbar-s" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
       </el-form>
       <template #footer>
         <el-button @click="paramVisible = false">取消</el-button>
@@ -182,6 +197,8 @@ const store = useSpcStore()
 const paramTypes = ['尺寸', '温度', '压力', '扭矩', '电压']
 // 工序编码格式：2~5 位大写字母（与后端校验一致），用于提交前即时拦截脏编码
 const PROCESS_CODE_RE = /^[A-Z]{2,5}$/
+// 参数编码格式：大写字母+数字+连字符，2~15 位（如 AX-DIA / WDG-TEMP / INS-VOLT）
+const PARAM_CODE_RE = /^[A-Z0-9][A-Z0-9-]{1,14}$/
 
 const selectedProcessId = ref<number | null>(null)
 const selectedProcess = computed(() =>
@@ -190,28 +207,24 @@ const selectedProcess = computed(() =>
 const paramsOfProcess = computed(() =>
   store.parameterList.filter((p) => p.processId === selectedProcessId.value),
 )
-
 const processVisible = ref(false)
 const paramVisible = ref(false)
 const saving = ref(false)
 
 const blankProcess: SpcProcess & { version?: number } = {
   id: 0, processCode: '', processName: '', description: '',
+  isActive: '是', changeRemark: '',
   plantCode: '', plantName: '', version: undefined,
 }
 const processForm = ref<SpcProcess & { version?: number }>({ ...blankProcess })
 
 const blankParam: SpcParameter & { version?: number } = {
   id: 0, processId: 0, paramCode: '', paramName: '', paramType: '', unit: '',
-  upperSpecLimit: null, lowerSpecLimit: null, targetValue: null,
-  subgroupSize: 5, chartType: 'Xbar-R', isActive: '是', plantCode: '', plantName: '',
-  version: undefined,
+  subgroupSize: 5, chartType: 'Xbar-R',
+  isActive: '是', decimalPlaces: 3, isCritical: '否', changeRemark: '',
+  plantCode: '', plantName: '', version: undefined,
 }
 const paramForm = ref<SpcParameter & { version?: number }>({ ...blankParam })
-
-function fmt(v: number | null | undefined): string {
-  return v == null ? '—' : String(v)
-}
 
 async function onProcessChange(row: SpcProcess | null) {
   if (!row) return
@@ -241,10 +254,16 @@ async function submitProcess() {
   saving.value = true
   try {
     if (f.id) {
-      await store.updateProcess(f.id, { processCode: f.processCode, processName: f.processName, description: f.description, version: f.version })
+      await store.updateProcess(f.id, {
+        processCode: f.processCode, processName: f.processName, description: f.description,
+        isActive: f.isActive, changeRemark: f.changeRemark, version: f.version,
+      })
       ElMessage.success('工序已更新')
     } else {
-      const res = await store.createProcess({ processCode: f.processCode, processName: f.processName, description: f.description })
+      const res = await store.createProcess({
+        processCode: f.processCode, processName: f.processName, description: f.description,
+        isActive: f.isActive, changeRemark: f.changeRemark,
+      })
       ElMessage.success('工序已创建')
       const newId = (res as any)?.data?.id
       processVisible.value = false
@@ -274,7 +293,7 @@ async function onDeleteProcess(row: SpcProcess) {
 function openParamDialog(row?: SpcParameter) {
   if (!selectedProcessId.value) return
   if (row) {
-    paramForm.value = { ...row, version: (row as any).version }
+    paramForm.value = { ...row, decimalPlaces: row.decimalPlaces ?? 3, version: (row as any).version }
   } else {
     paramForm.value = { ...blankParam, processId: selectedProcessId.value }
   }
@@ -283,10 +302,20 @@ function openParamDialog(row?: SpcParameter) {
 
 async function submitParam() {
   const f = paramForm.value
-  if (!f.paramCode || !f.paramName) {
-    ElMessage.warning('请填写参数编码与名称')
+  // 改进③：参数编码格式校验
+  if (!f.paramCode) {
+    ElMessage.warning('请输入参数编码')
     return
   }
+  if (!PARAM_CODE_RE.test(f.paramCode)) {
+    ElMessage.warning('参数编码须为 2~15 位，由大写字母/数字/连字符组成（如 AX-DIA）')
+    return
+  }
+  if (!f.paramName) {
+    ElMessage.warning('请输入参数名称')
+    return
+  }
+
   saving.value = true
   try {
     const payload = {
@@ -295,12 +324,10 @@ async function submitParam() {
       paramName: f.paramName,
       paramType: f.paramType,
       unit: f.unit,
-      upperSpecLimit: f.upperSpecLimit,
-      lowerSpecLimit: f.lowerSpecLimit,
-      targetValue: f.targetValue,
-      subgroupSize: f.subgroupSize,
-      chartType: f.chartType,
       isActive: f.isActive,
+      decimalPlaces: f.decimalPlaces != null ? Number(f.decimalPlaces) : 3,
+      isCritical: f.isCritical,
+      changeRemark: f.changeRemark,
       version: f.version,
     }
     if (f.id) {
@@ -335,5 +362,5 @@ onMounted(async () => {
 .card-head { display: flex; align-items: center; justify-content: space-between; }
 .card-title { font-weight: 600; color: #1B3A5B; }
 .sub-title { font-weight: 400; color: #8C9BA8; font-size: 12px; }
-.num { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #5B7A99; }
+.num { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #5B7A99; font-variant-numeric: tabular-nums; }
 </style>

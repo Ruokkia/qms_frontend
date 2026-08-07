@@ -212,10 +212,13 @@ function updateRouteQuery() {
   router.replace({ query })
 }
 
+const EXCEPTION_BIZ_TYPES = ['EXCEPTION_ORDER']
+
 function goToBusiness(item: Notification) {
-  if (item.businessType === 'EXCEPTION_ORDER' && item.businessId) {
-    router.push(`/exception?detail=${item.businessId}`)
-  } else if (item.businessType === 'ESCALATION' && item.businessId) {
+  if (!item.businessId) return
+  if (EXCEPTION_BIZ_TYPES.includes(item.businessType!)) {
+    router.push(`/exception/${item.businessId}`)
+  } else if (item.businessType === 'ESCALATION') {
     router.push(`/exception?escalation=${item.businessId}`)
   }
 }

@@ -9,12 +9,6 @@
         </p>
       </div>
       <div class="header-actions">
-        <QualityRuleDialog />
-        <el-button type="primary" size="default" @click="openCreate">新增</el-button>
-        <el-button type="warning" size="default" :loading="reconcileLoading" @click="openReconcile">
-          手动对账
-        </el-button>
-        <el-button type="primary" size="default" @click="openImport">批量导入</el-button>
       </div>
     </header>
 
@@ -233,15 +227,14 @@
       </div>
     </section>
 
-    <!-- 详情弹窗（含新增/编辑/查看，全部字段展示） -->
+    <!-- 详情弹窗（含编辑/查看，全部字段展示） -->
     <IncomingDetailDialog
       v-model="detailVisible"
       :detail="detail"
       :mode="detailMode"
+      :saving="savingDetail"
       @saved="onDetailSaved"
     />
-
-    <!-- 对账弹窗 -->
 
     <!-- 供应商合格率区间明细 -->
     <el-dialog
@@ -268,37 +261,6 @@
         </el-table-column>
       </el-table>
     </el-dialog>
-    <el-dialog v-model="reconcileVisible" title="手动对账" width="480">
-      <div class="reconcile-body">
-        <p class="reconcile-tip">扫描未关联异常单的不合格记录，自动创建异常单并发送通知。</p>
-        <el-form label-width="90px">
-          <el-form-item label="对账起始">
-            <el-date-picker v-model="reconcileRange" type="daterange" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" value-format="YYYY-MM-DD" style="width: 100%" />
-          </el-form-item>
-        </el-form>
-        <div v-if="reconcileResult" class="reconcile-result">
-          <div class="result-item">
-            <span class="result-label">扫描记录</span>
-            <span class="result-value">{{ reconcileResult.scannedCount }}</span>
-          </div>
-          <div class="result-item">
-            <span class="result-label">新建异常单</span>
-            <span class="result-value">{{ reconcileResult.createdCount }}</span>
-          </div>
-          <div v-if="reconcileResult.createdExceptionIds?.length" class="result-ids">
-            <span class="result-label">异常单ID</span>
-            <span class="result-value">{{ reconcileResult.createdExceptionIds.join(', ') }}</span>
-          </div>
-        </div>
-      </div>
-      <template #footer>
-        <el-button @click="reconcileVisible = false">关闭</el-button>
-        <el-button type="primary" :loading="reconcileLoading" @click="doReconcile">开始扫描</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 导入弹窗（Excel 上传 + 预览确认 + 失败明细） -->
-    <ImportDialog v-model="importVisible" @success="onImported" />
   </div>
 </template>
 
@@ -307,6 +269,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { runWithSavingState } from '@/utils/detail-save-state'
 import { useAuthStore } from '@/stores/auth'
 import {
   getMaterialInspectionListApi,
@@ -314,10 +277,8 @@ import {
   getKeySupplierTrendApi,
   getSupplierRankApi,
   getMaterialInspectionDetailApi,
-  createMaterialInspectionApi,
   updateMaterialInspectionApi,
   deleteMaterialInspectionApi,
-  reconcileMaterialInspectionApi,
 } from '@/api/incoming'
 import {
   getExceptionBySourceIdApi,
@@ -326,7 +287,6 @@ import {
 import type {
   MaterialInspection,
   MaterialInspectionStats,
-  MaterialInspectionReconcileResultVO,
   KeySupplierTrend,
   SupplierRankItem,
 } from '@/types/incoming'
@@ -334,8 +294,6 @@ import TrendChart from './components/TrendChart.vue'
 import SupplierRankChart from './components/SupplierRankChart.vue'
 import { filterSupplierRankItems } from './components/supplierRankFilter'
 import IncomingDetailDialog from './components/IncomingDetailDialog.vue'
-import ImportDialog from './components/ImportDialog.vue'
-import QualityRuleDialog from '@/components/quality/QualityRuleDialog.vue'
 import { getErrorMessage, isErrorNotified } from '@/api/request-error'
 
 const auth = useAuthStore()
@@ -590,7 +548,7 @@ async function openRectification(row: MaterialInspection) {
 }
 
 
-// ── 详情弹窗（查看/新增/编辑）─────────────────────────────────
+// ── 详情弹窗（查看/编辑）─────────────────────────────────────
 const detailVisible = ref(false)
 const detail = ref<MaterialInspection | null>(null)
 const detailMode = ref<'create' | 'view'>('view')
@@ -608,12 +566,6 @@ async function openDetail(id: number) {
   }
 }
 
-function openCreate() {
-  detail.value = null
-  detailMode.value = 'create'
-  detailVisible.value = true
-}
-
 async function openEdit(id: number) {
   try {
     const res = await getMaterialInspectionDetailApi(id)
@@ -629,36 +581,23 @@ async function openEdit(id: number) {
 }
 
 async function onDetailSaved(data: Partial<MaterialInspection>) {
-  savingDetail.value = true
-  try {
-    if (detailMode.value === 'create' || !data.id) {
-      // 新增：不传 id
-      const { id, ...createData } = data as any
-      const res = await createMaterialInspectionApi(createData)
-      if (res.code === 0) {
-        ElMessage.success('新增成功')
-        detailVisible.value = false
-        loadStats()
-        loadList()
-        loadSupplierRank()
-      }
-    } else {
-      // 更新
-      const res = await updateMaterialInspectionApi(data.id!, data)
-      if (res.code === 0) {
-        ElMessage.success('更新成功')
-        detailVisible.value = false
-        loadStats()
-        loadList()
-        loadSupplierRank()
-      }
+  await runWithSavingState((saving) => { savingDetail.value = saving }, async () => {
+    if (!data.id) {
+      ElMessage.error('缺少记录ID，无法保存修改')
+      return
     }
-  } catch (e: any) {
+    const res = await updateMaterialInspectionApi(data.id, data)
+    if (res.code === 0) {
+      ElMessage.success('更新成功')
+      detailVisible.value = false
+      loadStats()
+      loadList()
+      loadSupplierRank()
+    }
+  }).catch((e: any) => {
     if (!isErrorNotified(e)) ElMessage.error(`保存失败：${getErrorMessage(e)}`)
     console.error('保存物料检验记录失败', e)
-  } finally {
-    savingDetail.value = false
-  }
+  })
 }
 
 async function deleteRecord(id: number) {
@@ -682,55 +621,6 @@ async function deleteRecord(id: number) {
 }
 
 const savingDetail = ref(false)
-
-// ── 对账 ────────────────────────────────────────────────────
-const reconcileVisible = ref(false)
-const reconcileLoading = ref(false)
-const reconcileRange = ref<[string, string] | null>(null)
-const reconcileResult = ref<MaterialInspectionReconcileResultVO | null>(null)
-
-function openReconcile() {
-  reconcileRange.value = null
-  reconcileResult.value = null
-  reconcileVisible.value = true
-}
-
-async function doReconcile() {
-  reconcileLoading.value = true
-  try {
-    const params: any = {}
-    if (reconcileRange.value) {
-      params.startDate = reconcileRange.value[0]
-      params.endDate = reconcileRange.value[1]
-    }
-    const res = await reconcileMaterialInspectionApi(params)
-    if (res.code === 0) {
-      reconcileResult.value = res.data
-      ElMessage.success(`对账完成，新建 ${res.data.createdCount} 个异常单`)
-      loadStats()
-      loadList()
-      loadSupplierRank()
-    }
-  } catch (e) {
-    console.error('对账失败', e)
-  } finally {
-    reconcileLoading.value = false
-  }
-}
-
-// ── 导入（Excel 上传，复用 ImportDialog）────────────────────
-const importVisible = ref(false)
-
-function openImport() {
-  importVisible.value = true
-}
-
-// 导入成功后的列表与看板联动刷新
-function onImported() {
-  loadStats()
-  loadList()
-  loadSupplierRank()
-}
 
 // ── 分公司切换刷新 ───────────────────────────────────────────
 watch(
@@ -1016,19 +906,19 @@ loadSupplierRank()
   border-color: #e04a3e;
 }
 
-/* ── 对账/导入结果 ── */
-.reconcile-body, .import-body {
+/* ── 导入结果 ─────────────────────────────────────────────── */
+.import-body {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
-.reconcile-tip, .import-tip {
+.import-tip {
   margin: 0;
   font-size: 13px;
   color: #5b6770;
   line-height: 1.5;
 }
-.reconcile-result, .import-result {
+.import-result {
   background: #f5f7fa;
   border-radius: 6px;
   padding: 14px;

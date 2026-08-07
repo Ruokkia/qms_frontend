@@ -7,8 +7,17 @@
 export interface FaiChangeTrigger {
   id: number
   triggerType: string
-  workOrderNo?: string
+  /** 分类：PRODUCT(产品) / MATERIAL(物料) */
+  itemType?: 'PRODUCT' | 'MATERIAL'
+  /** 产品/物料代码（随 itemType 取值） */
+  itemCode?: string
+  /** 产品/物料名称（随 itemType 取值） */
+  itemName?: string
+  /** 产品/物料条码（随 itemType 取值） */
+  itemBarcode?: string
+  /** 物料代码（冗余兼容列） */
   materialCode?: string
+  /** 物料名称（冗余兼容列） */
   materialName?: string
   batchNo?: string
   processName?: string
@@ -16,6 +25,8 @@ export interface FaiChangeTrigger {
   triggerReason?: string
   status: string
   remark?: string
+  /** 作废原因（仅 status=已作废 时有值） */
+  voidReason?: string
   plantCode?: string
   plantName?: string
   createdBy?: string
@@ -36,6 +47,14 @@ export interface FaiInspectionRecord {
   processName?: string
   processCode?: string
   workOrderNo?: string
+  /** 分类：PRODUCT(产品) / MATERIAL(物料) */
+  itemType?: 'PRODUCT' | 'MATERIAL'
+  /** 产品/物料代码（随 itemType 取值） */
+  itemCode?: string
+  /** 产品/物料名称（随 itemType 取值） */
+  itemName?: string
+  /** 产品/物料条码（追溯标识，从变更触发复制） */
+  itemBarcode?: string
   inspectionResult: string
   signatureStatus: string
   remark?: string
@@ -114,6 +133,12 @@ export interface FaiStandardItem {
   standardValue?: string
   upperLimit?: number
   lowerLimit?: number
+  /** 目标值（物料-工序专属标准，非参数字典回填） */
+  targetValue?: number
+  /** SPC 子组大小 n（物料-工序专属标准） */
+  subgroupSize?: number
+  /** SPC 控制图类型：Xbar-R / Xbar-S / I-MR（物料-工序专属标准） */
+  chartType?: string
   unit?: string
   isRequired?: string
   sortOrder?: number
@@ -128,12 +153,34 @@ export interface FaiStandard {
   materialCode: string
   /** 物料名称（冗余，便于展示） */
   materialName?: string
+  /** 分类：PRODUCT(产品) / MATERIAL(物料) */
+  itemType?: 'PRODUCT' | 'MATERIAL'
+  /** 产品/物料条码（追溯标识） */
+  itemBarcode?: string
+  /** 产品/物料代码（随 itemType 取值） */
+  itemCode?: string
+  /** 产品/物料名称（随 itemType 取值） */
+  itemName?: string
   processName: string
   processCode?: string
   stdVersion: number
   isActive: string
   remark?: string
+  /** 生效日期（ECN 变更/药监审计） */
+  effectiveDate?: string
+  /** 变更备注（ECN 变更/药监审计） */
+  changeRemark?: string
   items?: FaiStandardItem[]
+  /** 最近复审时间（P3：定期复审提醒） */
+  lastReviewedAt?: string
+  /** 复审间隔天数（P3：定期复审提醒） */
+  reviewIntervalDays?: number
+  /** 被引用次数（P3：执行情况统计） */
+  usageCount?: number
+  /** 最近引用时间（P3：执行情况统计） */
+  lastUsedAt?: string
+  /** 是否复审逾期（前端计算或后端返回） */
+  reviewOverdue?: boolean
 }
 
 /** 首件检验详情响应（含参数明细 + 签名） */
@@ -166,8 +213,14 @@ export interface FaiSpcBaselineVO {
 
 export interface CreateChangeTriggerRequest {
   triggerType: string
-  workOrderNo?: string
+  /** 分类：PRODUCT(产品) / MATERIAL(物料) */
+  itemType: 'PRODUCT' | 'MATERIAL'
+  itemCode?: string
+  itemName?: string
+  itemBarcode?: string
+  /** 物料代码（冗余兼容列） */
   materialCode?: string
+  /** 物料名称（冗余兼容列） */
   materialName?: string
   batchNo?: string
   processName?: string
@@ -205,7 +258,13 @@ export interface FaiQuery {
   faiNo?: string
   batchNo?: string
   materialName?: string
+  /** 分类过滤：PRODUCT(产品) / MATERIAL(物料)，随分类选择器切换 */
+  itemType?: 'PRODUCT' | 'MATERIAL'
   inspectionResult?: string
+  /** 电子签名状态精确过滤：未签/已签 */
+  signatureStatus?: string
+  /** 档案模式：true 时服务端强制仅返回已签记录（不合格亦可进档案，未签不进档案；历史报告档案专用） */
+  archiveOnly?: boolean
 }
 
 export interface ChangeTriggerQuery {
@@ -215,6 +274,8 @@ export interface ChangeTriggerQuery {
   materialCode?: string
   batchNo?: string
   status?: string
+  /** 分类：PRODUCT(产品) / MATERIAL(物料) */
+  itemType?: string
 }
 
 // ===== 标准模板 维护（手动设置物料/工序标准） =====
@@ -228,6 +289,12 @@ export interface FaiStandardItemRequest {
   standardValue?: string
   upperLimit?: number
   lowerLimit?: number
+  /** 目标值（物料-工序专属标准） */
+  targetValue?: number
+  /** SPC 子组大小 n（物料-工序专属标准） */
+  subgroupSize?: number
+  /** SPC 控制图类型：Xbar-R / Xbar-S / I-MR（物料-工序专属标准） */
+  chartType?: string
   unit?: string
   isRequired?: string
   sortOrder?: number
@@ -238,12 +305,67 @@ export interface FaiStandardItemRequest {
 
 /** 标准模板 保存请求 */
 export interface FaiStandardSaveRequest {
+  /** 编辑时必填，新建时不填 */
+  id?: number
   materialCode: string
   materialName?: string
+  /** 分类：PRODUCT(产品) / MATERIAL(物料) */
+  itemType: 'PRODUCT' | 'MATERIAL'
+  /** 产品/物料条码（追溯标识） */
+  itemBarcode?: string
+  itemCode?: string
+  itemName?: string
   processName: string
   processCode?: string
   stdVersion?: number
   isActive?: string
   remark?: string
+  /** 生效日期（ECN 变更/药监审计，格式 yyyy-MM-dd） */
+  effectiveDate?: string
+  /** 变更备注（ECN 变更/药监审计） */
+  changeRemark?: string
   items: FaiStandardItemRequest[]
+}
+
+/** 标准变更历史记录（P0：变更追溯） */
+export interface FaiStandardHistory {
+  id: number
+  standardId: number
+  /** CREATE / UPDATE / DELETE */
+  changeType: string
+  /** 操作人填写的变更原因 */
+  changeReason?: string
+  /** 变更前快照 JSON（标准 + 参数项），CREATE 时为 null */
+  beforeSnapshot?: string
+  /** 变更后快照 JSON（标准 + 参数项），DELETE 时为 null */
+  afterSnapshot?: string
+  /** 自动生成的差异摘要 */
+  diffSummary?: string
+  /** 操作人 */
+  changedBy?: string
+  /** 操作时间 */
+  changedAt?: string
+  plantCode?: string
+  plantName?: string
+}
+
+/** 标准审批记录（P1：轻量级审批） */
+export interface FaiStandardApproval {
+  id: number
+  standardId?: number
+  /** CREATE / UPDATE / DELETE */
+  approvalType: string
+  /** 待审批的请求数据（JSON 字符串，可解析为 FaiStandardSaveRequest） */
+  requestData: string
+  requester: string
+  requestedAt: string
+  approver?: string
+  approvedAt?: string
+  /** PENDING / APPROVED / REJECTED */
+  approvalStatus: string
+  rejectReason?: string
+  applied: boolean
+  remark?: string
+  plantCode?: string
+  plantName?: string
 }

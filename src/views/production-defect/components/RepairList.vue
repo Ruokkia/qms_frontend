@@ -362,10 +362,14 @@ async function onSubmit() {
 }
 
 async function onDelete(row: ProductionRepair) {
-  await ElMessageBox.confirm(`确认删除维修记录「${row.repairNo}」？`, '提示', { type: 'warning' })
-  await deleteRepairApi(row.id)
-  ElMessage.success('删除成功')
-  await reload()
+  try {
+    await ElMessageBox.confirm(`确认删除维修记录「${row.repairNo}」？`, '提示', { type: 'warning' })
+    await deleteRepairApi(row.id)
+    ElMessage.success('删除成功')
+    await reload()
+  } catch {
+    // 用户取消确认或请求失败，不做处理
+  }
 }
 
 onMounted(() => {

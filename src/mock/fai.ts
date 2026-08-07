@@ -18,6 +18,10 @@ import type {
 const TRIGGER_TYPES = ['换模具', '升级系统', '换批次', '换设备', '材料批次']
 const PROCESSES = ['装配', '焊接', '检测']
 
+// 物料代码对齐真实 ERP 编码体系（来源：qms-pg-dev 导出 material_inspection）
+const MOCK_MATERIAL_CODES = ['99.11.100558', '10.09.200320', '10.99.990135', '99.99.004076', '20.18.990015']
+const MOCK_MATERIAL_NAMES = ['可充电式电批', 'A26', 'EP离心管', '奶瓶重力球', '超声板PCBA']
+
 function getPlantCode(): string {
   return sessionStorage.getItem('qms_region') || 'SZ'
 }
@@ -31,9 +35,12 @@ function buildTriggers(): FaiChangeTrigger[] {
     list.push({
       id: i + 1,
       triggerType: TRIGGER_TYPES[i % TRIGGER_TYPES.length],
-      workOrderNo: `WO-2026071${i % 9}-${100 + i}`,
-      materialCode: `M00${(i % 5) + 1}`,
-      materialName: ['主轴组件', '外壳盖板', '连接线束', '密封圈', '控制板'][i % 5],
+      itemType: i % 2 === 0 ? 'PRODUCT' : 'MATERIAL',
+      itemCode: MOCK_MATERIAL_CODES[i % 5],
+      itemName: MOCK_MATERIAL_NAMES[i % 5],
+      itemBarcode: `BC-${String(i + 1).padStart(4, '0')}`,
+      materialCode: MOCK_MATERIAL_CODES[i % 5],
+      materialName: MOCK_MATERIAL_NAMES[i % 5],
       batchNo: `B-20260719-${String(i + 1).padStart(3, '0')}`,
       processName: PROCESSES[i % PROCESSES.length],
       triggerReason: '新品首产/换线，需执行首件检验',
@@ -92,7 +99,7 @@ const ALL_INSPECTIONS = buildInspections()
 const STANDARDS: FaiStandard[] = [
   {
     id: 1,
-    materialCode: 'M001',
+    materialCode: '99.11.100558',
     processName: '装配',
     stdVersion: 1,
     isActive: '是',

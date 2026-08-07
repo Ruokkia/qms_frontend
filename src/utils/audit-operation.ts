@@ -17,6 +17,7 @@ const operationNames: Record<string, string> = {
   UPDATE_ROLE_PERMISSION: '调整角色权限',
   CREATE_ROLE: '创建角色',
   DELETE_ROLE: '删除角色',
+  UPDATE_NOTIFICATION_CONFIG: '更新通知配置',
 }
 
 export function auditOperationName(operationType: string): string {

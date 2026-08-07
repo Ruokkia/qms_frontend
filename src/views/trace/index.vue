@@ -105,6 +105,7 @@
     <TraceNodeDetail
       v-model:visible="detailVisible"
       :node-id="detailNodeId"
+      :son-lot-no="detailSonLotNo"
     />
   </div>
 </template>
@@ -122,7 +123,7 @@ import {
   TRACE_DIRECTION_LABELS,
   TRACE_MAX_LEVEL,
 } from '@/enums/trace'
-import type { TraceTreeResult } from '@/types/trace'
+import type { TraceTreeResult, TraceNode } from '@/types/trace'
 import TraceListView from './components/TraceListView.vue'
 import TraceTreeView from './components/TraceTreeView.vue'
 import TraceNodeDetail from './components/TraceNodeDetail.vue'
@@ -157,11 +158,12 @@ async function loadQuickItems() {
     const { data } = await axios.get(`${incomingTraceBase}/nodes`, {
       headers: { Authorization: `Bearer ${sessionStorage.getItem('qms_token') || ''}` },
     })
-    quickItems.value = (data.data || [])
+    // 去重改用 Set：O(n²) indexOf 在数万条数据下会阻塞主线程数秒，Set 为 O(n)
+    const rawBarcodes = (data.data || [])
       .filter((node: any) => ['FINISHED_GOOD', 'SEMI_FINISHED', 'MATERIAL'].includes(node.nodeType))
       .map((node: any) => node.barcode)
-      .filter((barcode: string, index: number, values: string[]) => barcode && values.indexOf(barcode) === index)
-      .slice(0, 6)
+      .filter((barcode: string) => !!barcode)
+    quickItems.value = Array.from(new Set(rawBarcodes)).slice(0, 6)
   } catch {
     quickItems.value = []
   }
@@ -222,9 +224,12 @@ function collapseAll() {
 // ── 节点详情 ────────────────────────────────────────────────
 const detailVisible = ref(false)
 const detailNodeId = ref<string | null>(null)
+/** 半成品子项批号（详情查询用，不影响追溯链路） */
+const detailSonLotNo = ref<string | null>(null)
 
-function openDetail(id: string | number) {
-  detailNodeId.value = String(id)
+function openDetail(node: TraceNode) {
+  detailNodeId.value = String(node.id)
+  detailSonLotNo.value = node.sonLotNo ?? null
   detailVisible.value = true
 }
 
@@ -235,8 +240,9 @@ watch(
     const routeCode = typeof route.query.code === 'string' ? route.query.code : ''
     if (routeCode) inputValue.value = routeCode
     const routeDirection = typeof route.query.direction === 'string' ? route.query.direction : ''
-    if (routeDirection === TraceDirectionEnum.FULL) {
-      direction.value = TraceDirectionEnum.FULL
+    const matched = (Object.values(TraceDirectionEnum) as string[]).includes(routeDirection)
+    if (matched) {
+      direction.value = routeDirection as TraceDirectionEnum
     }
 
     if (inputValue.value) doQuery()

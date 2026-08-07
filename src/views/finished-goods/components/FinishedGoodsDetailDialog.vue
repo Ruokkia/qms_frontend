@@ -276,7 +276,7 @@
       <div class="dialog-footer">
         <template v-if="mode === 'view'">
           <el-button @click="handleClose">关闭</el-button>
-          <el-button type="primary" @click="mode = 'edit'">编辑</el-button>
+          <el-button v-if="!readonly" type="primary" @click="mode = 'edit'">编辑</el-button>
         </template>
         <template v-else>
           <el-button @click="cancelEdit">取消</el-button>
@@ -298,6 +298,8 @@ const props = defineProps<{
   modelValue: boolean
   detail: FinishedGoodsInspection | null
   editMode?: boolean
+  saving?: boolean
+  readonly?: boolean
 }>()
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
@@ -306,7 +308,6 @@ const emit = defineEmits<{
 
 const formRef = ref<InstanceType<typeof ElForm>>()
 const mode = ref<'view' | 'edit'>('view')
-const saving = ref(false)
 
 const isCreate = ref(false)
 
@@ -383,7 +384,6 @@ function handleClose() {
 }
 
 function handleSave() {
-  saving.value = true
   const payload = { ...form }
   if (isCreate.value) {
     // 新增不传 id

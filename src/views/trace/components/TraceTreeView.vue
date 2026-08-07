@@ -36,7 +36,7 @@ const props = defineProps<{
   expandDepth: number
   direction: TraceDirectionEnum
 }>()
-const emit = defineEmits<{ viewDetail: [id: string | number] }>()
+const emit = defineEmits<{ viewDetail: [node: TraceNode] }>()
 
 const chartRef = ref<HTMLElement>()
 let chart: echarts.ECharts | null = null
@@ -60,6 +60,46 @@ interface EchartsNode {
 }
 
 /** 将追溯结果转为 ECharts tree 节点（合并向上链 + 起点 + 向下树） */
+interface TreeLabelSizes {
+  left: number
+  right: number
+  top: number
+  bottom: number
+}
+
+/** 根据树数据测量各方向标签所需的最小边距（像素），避免节点标签被裁剪到画布外 */
+function measureLabelSizes(treeData: EchartsNode): TreeLabelSizes {
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')!
+  ctx.font = '11px sans-serif'
+  let maxLeft = 0
+  let maxRight = 0
+  let maxHalfHeight = 0
+  function walk(node: EchartsNode) {
+    const text = node.label || node.name
+    const lines = text.split('\n')
+    const lineCount = lines.length
+    const maxLineWidth = Math.max(...lines.map(l => ctx.measureText(l).width))
+    // label box: padding [4,8] + border 1px each side + 22px buffer
+    // (22px 预留标签锚点偏移：label distance 5 + 符号半径约 8 + 边框，防止标签框超界)
+    const labelWidth = maxLineWidth + 16 + 2 + 22
+    // height: lines * lineHeight(15) + vertical padding(8) + borders(2)
+    const labelHeight = lineCount * 15 + 8 + 2
+    const halfHeight = labelHeight / 2
+    const isLeaf = !node.children || node.children.length === 0
+    if (isLeaf) {
+      maxRight = Math.max(maxRight, labelWidth)
+    } else {
+      maxLeft = Math.max(maxLeft, labelWidth)
+    }
+    maxHalfHeight = Math.max(maxHalfHeight, halfHeight)
+    node.children?.forEach(walk)
+  }
+  walk(treeData)
+  const v = maxHalfHeight + 4
+  return { left: maxLeft, right: maxRight, top: v, bottom: v }
+}
+
 function buildEchartsTree(): EchartsNode {
   const r = props.result
   const queryId = r.rootNode?.id
@@ -139,7 +179,7 @@ function tooltipHtml(data: any): string {
   return h
 }
 
-function findNodeById(result: TraceTreeResult, id: number): TraceNode | null {
+function findNodeById(result: TraceTreeResult, id: string | number): TraceNode | null {
   if (result.rootNode.id === id) return result.rootNode
   const search = (nodes?: TraceNode[]): TraceNode | null => {
     if (!nodes) return null
@@ -157,6 +197,15 @@ function renderChart() {
   if (!chartRef.value) return
   chart ??= echarts.init(chartRef.value)
   const treeData = buildEchartsTree()
+  // 动态计算边距，确保左右/上下标签完整展示在图内
+  const { left: mL, right: mR, top: mT, bottom: mB } = measureLabelSizes(treeData)
+  const chartWidth = chartRef.value.clientWidth || 800
+  const chartHeight = chartRef.value.clientHeight || 520
+  const left = Math.min(mL, chartWidth * 0.35)
+  const right = Math.min(Math.max(mR, chartWidth * 0.1), chartWidth * 0.35)
+  const top = Math.min(Math.max(mT, chartHeight * 0.04), chartHeight * 0.3)
+  const bottom = Math.min(Math.max(mB, chartHeight * 0.04), chartHeight * 0.3)
+  // notMerge: 每次渲染完全重置选项，避免旧边距/漫游状态残留
   chart.setOption({
     backgroundColor: '#faf9f7',
     tooltip: {
@@ -172,16 +221,19 @@ function renderChart() {
     series: [{
       type: 'tree',
       data: [treeData],
-      top: '4%',
-      left: '12%',
-      bottom: '4%',
-      right: '24%',
+      top,
+      left,
+      bottom,
+      right,
       symbol: 'circle',
       symbolSize: (value: number, params: any) => params.data?.symbolSize || 12,
       orient: 'LR',
       expandAndCollapse: true,
       initialTreeDepth: props.expandDepth,
       roam: true,
+      // 每次渲染重置视图，避免上一次平移/缩放的状态残留导致节点跑到画布外
+      center: ['50%', '50%'],
+      zoom: 1,
       label: {
         position: 'left',
         verticalAlign: 'middle',
@@ -213,10 +265,13 @@ function renderChart() {
       animationDuration: 550,
       animationDurationUpdate: 750,
     }],
-  })
+  }, true)
   chart.off('click')
   chart.on('click', (params: any) => {
-    if (params.data?.nodeId) emit('viewDetail', params.data.nodeId)
+    if (params.data?.nodeId) {
+      const n = findNodeById(props.result, params.data.nodeId)
+      if (n) emit('viewDetail', n)
+    }
   })
 }
 

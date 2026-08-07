@@ -4,7 +4,7 @@
  * 路径前缀：/api/v1/finished-goods
  * 严格对齐 FinishedGoodsInspectionController 接口契约。
  */
-import { apiGet, apiPost, apiPut, apiDelete } from './request'
+import { apiGet, apiPut, apiDelete } from './request'
 import type { ApiResult, PageResult } from '@/types'
 import type {
   FinishedGoodsInspection,

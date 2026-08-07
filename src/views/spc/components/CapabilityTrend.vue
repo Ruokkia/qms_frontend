@@ -49,8 +49,13 @@ import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import * as echarts from 'echarts'
 import { useSpcStore } from '@/stores/spc'
 import { detectControlRules } from '@/utils/spcRules'
+import { buildLimitMarks, axisRange, spanOf } from '@/utils/spcChartMarks'
 
-const props = defineProps<{ paramId: number | null }>()
+const props = defineProps<{
+  paramId: number | null
+  itemType?: 'PRODUCT' | 'MATERIAL'
+  itemCode?: string
+}>()
 const store = useSpcStore()
 
 const chartRef = ref<HTMLDivElement | null>(null)
@@ -64,9 +69,10 @@ const hasData = computed(() => (data.value?.points?.length || 0) > 0)
 
 const param = computed(() => store.parameterList.find((p) => p.id === props.paramId) || null)
 const unit = computed(() => param.value?.unit || '')
-const usl = computed(() => (param.value?.upperSpecLimit == null ? null : Number(param.value.upperSpecLimit)))
-const lsl = computed(() => (param.value?.lowerSpecLimit == null ? null : Number(param.value.lowerSpecLimit)))
-const target = computed(() => (param.value?.targetValue == null ? null : Number(param.value.targetValue)))
+// 规格限：优先从 chartData（FAI 标准层解析结果），未选产品时为 null → 不展示规格线
+const usl = computed(() => (data.value?.upperSpecLimit == null ? null : Number(data.value.upperSpecLimit)))
+const lsl = computed(() => (data.value?.lowerSpecLimit == null ? null : Number(data.value.lowerSpecLimit)))
+const target = computed(() => (data.value?.targetValue == null ? null : Number(data.value.targetValue)))
 
 const limits = ref<{ ucl: number | null; cl: number | null; lcl: number | null; ooc: number }>({
   ucl: null,
@@ -87,15 +93,6 @@ function n(v: number | null | undefined): number | null {
 }
 function fmt(v: number | null | undefined): string {
   return v == null ? '—' : Number(v).toFixed(3)
-}
-
-function initChart() {
-  if (!chartRef.value) return
-  chart = echarts.init(chartRef.value)
-  ro = new ResizeObserver(() => {
-    if (chart && chartRef.value && chartRef.value.clientWidth > 0) chart.resize()
-  })
-  ro.observe(chartRef.value)
 }
 
 function handleResize() {
@@ -140,27 +137,16 @@ function render() {
     }
   })
 
-  const limitMark = {
-    silent: true,
-    symbol: 'none',
-    lineStyle: { color: '#B8763E', type: 'dashed' as const, width: 1.2 },
-    label: { show: false },
-    data: [
-      ...(xUcl != null ? [{ yAxis: xUcl, name: 'UCL', label: { show: true, formatter: `UCL ${fmt(xUcl)}`, color: '#B8763E', fontSize: 10, position: 'end' as const } }] : []),
-      ...(xCl != null ? [{ yAxis: xCl, name: 'CL', label: { show: true, formatter: `CL ${fmt(xCl)}`, color: '#B8763E', fontSize: 10, position: 'end' as const } }] : []),
-      ...(xLcl != null ? [{ yAxis: xLcl, name: 'LCL', label: { show: true, formatter: `LCL ${fmt(xLcl)}`, color: '#B8763E', fontSize: 10, position: 'end' as const } }] : []),
-    ],
-  }
-  const specMark = {
-    silent: true,
-    symbol: 'none',
-    lineStyle: { color: '#B84B3E', type: 'dotted' as const, width: 1.4 },
-    label: { show: false },
-    data: [
-      ...(usl.value != null ? [{ yAxis: usl.value, name: 'USL', label: { show: true, formatter: `USL ${fmt(usl.value)}`, color: '#B84B3E', fontSize: 10, position: 'end' as const } }] : []),
-      ...(lsl.value != null ? [{ yAxis: lsl.value, name: 'LSL', label: { show: true, formatter: `LSL ${fmt(lsl.value)}`, color: '#B84B3E', fontSize: 10, position: 'end' as const } }] : []),
-    ],
-  }
+  const span = spanOf(x, [xUcl, xCl, xLcl, usl.value, lsl.value])
+  const limitMark = buildLimitMarks([
+    { label: 'UCL', value: xUcl, kind: 'ctrl' },
+    { label: 'CL', value: xCl, kind: 'ctrl' },
+    { label: 'LCL', value: xLcl, kind: 'ctrl' },
+  ], span)
+  const specMark = buildLimitMarks([
+    { label: 'USL', value: usl.value, kind: 'spec' },
+    { label: 'LSL', value: lsl.value, kind: 'spec' },
+  ], span)
 
   chart.setOption(
     {
@@ -186,7 +172,7 @@ function render() {
       },
       yAxis: {
         type: 'value',
-        scale: true,
+        ...axisRange(x, [xUcl, xCl, xLcl, usl.value, lsl.value]),
         name: `X̄（${unit.value}）`,
         nameTextStyle: { color: '#5B7A99', fontSize: 10 },
         splitLine: { lineStyle: { color: '#F0EDE9' } },
@@ -220,26 +206,31 @@ function render() {
 
 async function load() {
   if (!props.paramId) return
+  // 必须透传分类与代码：本组件与控制图共用 store 中同一份图表数据，
+  // 若此处不带筛选条件，会用全量数据覆盖控制图已按分类过滤的结果。
   if (chartType.value === 'Xbar-s') {
-    await store.fetchChartDataXbarS(props.paramId)
+    await store.fetchChartDataXbarS(props.paramId, props.itemType, props.itemCode)
   } else {
-    await store.fetchChartDataXbarR(props.paramId)
+    await store.fetchChartDataXbarR(props.paramId, props.itemType, props.itemCode)
   }
   render()
 }
 
 watch(
-  () => props.paramId,
+  () => [props.paramId, props.itemType, props.itemCode],
   () => load(),
 )
-onMounted(() => {
+function initChart() {
+  if (!chartRef.value || chart) return
   chart = echarts.init(chartRef.value!)
   ro = new ResizeObserver(() => {
+    // 仅当容器可见（宽度>0）时 resize，避免隐藏 Tab 内的 0 尺寸容器触发无限重渲染
     if (chart && chartRef.value && chartRef.value.clientWidth > 0) chart.resize()
   })
   ro.observe(chartRef.value!)
   load()
-})
+}
+onMounted(() => { initChart() })
 onUnmounted(() => {
   ro?.disconnect()
   window.removeEventListener('resize', handleResize)

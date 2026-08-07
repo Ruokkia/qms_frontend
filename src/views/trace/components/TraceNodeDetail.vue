@@ -17,6 +17,12 @@
           <div class="detail-code">{{ node.nodeCode }}</div>
         </div>
 
+        <div v-if="detailTarget" class="detail-action">
+          <el-button type="primary" plain :loading="businessDetailLoading" @click="openBusinessDetail">
+            查看详细信息
+          </el-button>
+        </div>
+
         <!-- 基本信息 -->
         <div class="field-group">
           <div class="group-title">基本信息</div>
@@ -118,13 +124,34 @@
       </div>
     </div>
   </el-drawer>
+
+  <FinishedGoodsDetailDialog
+    v-model="finishedDetailVisible"
+    :detail="finishedDetail"
+    :edit-mode="false"
+    readonly
+  />
+  <IncomingDetailDialog
+    v-model="incomingDetailVisible"
+    :detail="incomingDetail"
+    mode="view"
+    readonly
+  />
 </template>
 
 <script setup lang="ts">
 // ===== M0: 追溯节点详情抽屉（物件全字段展示） =====
 import { ref, computed, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import { getTraceNodeDetailApi } from '@/api/trace'
+import { getFinishedGoodsDetailApi } from '@/api/finishedGoods'
+import { getMaterialInspectionDetailApi } from '@/api/incoming'
 import type { TraceNodeDetail } from '@/types/trace'
+import type { FinishedGoodsInspection } from '@/types/finishedGoods'
+import type { MaterialInspection } from '@/types/incoming'
+import { resolveTraceDetailTarget } from '@/utils/trace-detail-target'
+import FinishedGoodsDetailDialog from '@/views/finished-goods/components/FinishedGoodsDetailDialog.vue'
+import IncomingDetailDialog from '@/views/incoming/components/IncomingDetailDialog.vue'
 import {
   NodeTypeEnum,
   NODE_TYPE_LABELS,
@@ -135,6 +162,8 @@ import {
 const props = defineProps<{
   visible: boolean
   nodeId: string | null
+  /** 半成品子项批号（详情查询用，不影响追溯链路） */
+  sonLotNo?: string | null
 }>()
 const emit = defineEmits<{
   'update:visible': [v: boolean]
@@ -150,6 +179,12 @@ const detail = ref<TraceNodeDetail | null>(null)
 const node = computed(() => detail.value?.detail ?? null)
 const batch = computed(() => detail.value?.batchInfo ?? null)
 const inspections = computed(() => detail.value?.inspections ?? [])
+const detailTarget = computed(() => node.value ? resolveTraceDetailTarget(node.value.id, node.value.nodeType) : null)
+const finishedDetailVisible = ref(false)
+const incomingDetailVisible = ref(false)
+const finishedDetail = ref<FinishedGoodsInspection | null>(null)
+const incomingDetail = ref<MaterialInspection | null>(null)
+const businessDetailLoading = ref(false)
 
 const typeLabel = computed(() => {
   if (!node.value) return ''
@@ -166,19 +201,63 @@ function iqcColor(status: string): string {
   return IQC_STATUS_COLORS[status] ?? '#8C9BA8'
 }
 
+async function openBusinessDetail() {
+  const target = detailTarget.value
+  if (!target) return
+
+  businessDetailLoading.value = true
+  try {
+    if (target.kind === 'finished') {
+      const res = await getFinishedGoodsDetailApi(target.id)
+      if (res.code === 0 && res.data) {
+        finishedDetail.value = res.data
+        finishedDetailVisible.value = true
+      } else {
+        ElMessage.error(res.message || '加载成品详细信息失败')
+      }
+      return
+    }
+
+    const res = await getMaterialInspectionDetailApi(target.id)
+    if (res.code === 0 && res.data) {
+      incomingDetail.value = res.data
+      incomingDetailVisible.value = true
+    } else {
+      ElMessage.error(res.message || '加载来料详细信息失败')
+    }
+  } catch {
+    ElMessage.error('加载详细信息失败，请稍后重试')
+  } finally {
+    businessDetailLoading.value = false
+  }
+}
+
 async function loadDetail(nodeIdStr: string) {
   loading.value = true
   detail.value = null
   try {
-    // 解析复合 ID：格式 "fg_123" 或 "mi_456"
-    const parts = nodeIdStr.split('_')
-    const type = parts[0] as 'fg' | 'mi'
-    const id = parseInt(parts[1], 10)
-    if (!['fg', 'mi'].includes(type) || isNaN(id)) {
+    // 解析复合 ID：新格式 "fg:ABC" / "mi:ABC"（条码），兼容旧格式 "fg_123" / "mi_456"（数字主键）
+    let type: 'fg' | 'mi' = 'fg'
+    let id: string | number = nodeIdStr
+    if (nodeIdStr.includes(':')) {
+      const [prefix, value] = nodeIdStr.split(':')
+      type = prefix as 'fg' | 'mi'
+      id = value
+    } else {
+      const parts = nodeIdStr.split('_')
+      const parsed = parseInt(parts[1], 10)
+      if (!['fg', 'mi'].includes(parts[0]) || isNaN(parsed)) {
+        console.error('无法解析节点ID:', nodeIdStr)
+        return
+      }
+      type = parts[0] as 'fg' | 'mi'
+      id = parsed
+    }
+    if (!['fg', 'mi'].includes(type) || id === '') {
       console.error('无法解析节点ID:', nodeIdStr)
       return
     }
-    const res = await getTraceNodeDetailApi(id, type)
+    const res = await getTraceNodeDetailApi(id, type, props.sonLotNo ?? undefined)
     if (res.code === 0) detail.value = res.data
   } catch (e) {
     console.error('加载节点详情失败', e)
@@ -209,6 +288,11 @@ watch(
   border-radius: 4px;
   padding: 16px;
   margin-bottom: 20px;
+}
+.detail-action {
+  display: flex;
+  justify-content: flex-end;
+  margin: -8px 0 20px;
 }
 .detail-type-tag {
   display: inline-block;

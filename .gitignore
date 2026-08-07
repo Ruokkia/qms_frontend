@@ -32,3 +32,7 @@ test-results/
 !.vscode/settings.json
 .DS_Store
 Thumbs.db
+login-account-only.png
+login-captcha-required.png
+login-empty-submit.png
+login-recon.png

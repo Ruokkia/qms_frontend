@@ -6,51 +6,150 @@
         <h2 class="page-title">SPC 过程能力分析</h2>
         <div class="page-sub">关键工序（装配 / 焊接 / 检测）过程控制与能力评估 · {{ plantName }}</div>
       </div>
-      <div class="head-param">
-        <span class="lbl">分析参数</span>
-        <el-select v-model="selectedParamId" placeholder="选择关键参数" clearable style="width: 320px">
-          <el-option-group
-            v-for="grp in groupedParams"
-            :key="grp.processName"
-            :label="grp.processName"
-          >
-            <el-option
-              v-for="p in grp.params"
-              :key="p.id"
-              :label="`${p.paramName}（${p.paramCode} · n=${p.subgroupSize} · ${p.chartType}）`"
-              :value="p.id"
-            />
-          </el-option-group>
-        </el-select>
-      </div>
     </div>
 
-    <el-tabs v-model="activeTab" class="spc-tabs">
+    <!-- 数据加载失败提示（可重试，避免卡死在 loading） -->
+    <el-alert
+      v-if="store.error"
+      type="error"
+      :closable="false"
+      show-icon
+      class="load-error"
+      style="margin-bottom: 14px"
+    >
+      <template #default>
+        <div class="load-error-body">
+          <span>{{ store.error }}</span>
+          <el-button type="primary" size="small" :loading="store.loading" @click="reload">
+            重新加载
+          </el-button>
+        </div>
+      </template>
+    </el-alert>
+
+    <el-tabs v-model="activeTab" class="spc-tabs" lazy>
       <el-tab-pane label="参数配置" name="config">
         <ProcessConfig />
       </el-tab-pane>
 
       <el-tab-pane label="数据采集" name="entry">
-        <DataEntry v-model="selectedParamId" :param-list="store.parameterList" @saved="onSaved" />
+        <DataEntry
+          :preset-item-code="faiPreset.itemCode"
+          :preset-process-name="faiPreset.processName"
+          :fai-record-id="faiPreset.faiRecordId"
+          @saved="onSaved"
+        />
       </el-tab-pane>
 
       <el-tab-pane label="控制图" name="chart">
-        <div v-if="!selectedParamId" class="need-param">请先在右上角选择分析参数</div>
+        <div class="chart-filterbar">
+          <div class="filter-item">
+            <span class="lbl">分类</span>
+            <el-radio-group :model-value="chartItemType" @update:model-value="onChartItemTypeChange">
+              <el-radio-button value="PRODUCT">产品</el-radio-button>
+              <el-radio-button value="MATERIAL">物料</el-radio-button>
+            </el-radio-group>
+          </div>
+          <div class="filter-item">
+            <el-autocomplete
+              v-model="chartItemCode"
+              :fetch-suggestions="chartQuerySearchAsync"
+              :placeholder="`${chartTypeLabel}代码（支持模糊搜索，可下拉选择）`"
+              clearable
+              value-key="itemCode"
+              :trigger-on-focus="false"
+              class="code-input"
+              @select="onChartItemSelect"
+              @blur="onChartItemBlur"
+              @keyup.enter="onChartFilter"
+            >
+              <template #prefix>
+                <el-icon><Search /></el-icon>
+              </template>
+              <template #default="{ item }">
+                <div class="barcode-option">
+                  <span class="barcode-option__code">{{ item.itemCode }}</span>
+                  <span class="barcode-option__meta">{{ item.itemName }} · {{ item.itemType === 'PRODUCT' ? '产品' : '物料' }}</span>
+                </div>
+              </template>
+            </el-autocomplete>
+            <!-- 批次筛选下拉（多批次存在时显示） -->
+            <el-select
+              v-if="currentChartBatches.length > 0"
+              v-model="chartBatchNo"
+              size="small"
+              placeholder="全部批次"
+              clearable
+              class="batch-select"
+              @change="onBatchChange"
+            >
+              <el-option label="全部批次" value="" />
+              <el-option v-for="b in currentChartBatches" :key="b" :label="b" :value="b" />
+            </el-select>
+          </div>
+          <div class="filter-item">
+            <span class="lbl">工序</span>
+            <el-select
+              v-model="chartProcessId"
+              placeholder="请先输入代码"
+              :disabled="!chartItemCode"
+              clearable
+              class="param-select"
+              style="width:180px"
+              @change="onChartProcessChange"
+            >
+              <el-option
+                v-for="p in store.processList"
+                :key="p.id"
+                :label="p.processName"
+                :value="p.id"
+              />
+            </el-select>
+          </div>
+          <div class="filter-item grow">
+            <span class="lbl">参数</span>
+            <el-select
+              v-model="chartParamId"
+              :placeholder="chartProcessId ? '选择关键参数' : '请先选工序'"
+              :disabled="!chartProcessId"
+              clearable
+              class="param-select"
+              @change="onChartFilter"
+            >
+              <el-option
+                v-for="p in filteredChartParams"
+                :key="p.id"
+                :label="`${p.paramName}（${p.paramCode} · n=${p.subgroupSize} · ${p.chartType}）`"
+                :value="p.id"
+              />
+            </el-select>
+          </div>
+        </div>
+        <div v-if="!chartParamId" class="need-param">
+          <el-icon class="np-icon"><DataAnalysis /></el-icon>
+          <div class="np-title">请选择分析参数</div>
+          <div class="np-sub">在上方下拉框选择关键参数后，即可查看对应的 {{ chartTypeOfSelected }} 控制图</div>
+        </div>
+        <div v-else-if="!chartItemCode" class="need-param">
+          <el-icon class="np-icon"><Search /></el-icon>
+          <div class="np-title">请指定{{ chartTypeLabel }}代码</div>
+          <div class="np-sub">不同{{ chartTypeLabel }}的上/下限标准不同，需先指定代码才能确保控制图准确反映该{{ chartTypeLabel }}的规格和过程状态</div>
+        </div>
         <template v-else>
           <el-alert
-            v-if="currentParam"
-            :title="`${currentParam.paramName}（${currentParam.chartType}）控制图`"
+            v-if="chartCurrentParam"
+            :title="`${chartCurrentParam.paramName}（${chartCurrentParam.chartType}）控制图 · ${chartTypeLabel}代码 ${chartItemCode}`"
             type="info"
             :closable="false"
             show-icon
-            style="margin-bottom: 12px"
+            class="chart-context"
           />
           <el-alert
             v-if="xbarSParams.length"
             type="warning"
             :closable="false"
             show-icon
-            style="margin-bottom: 12px"
+            class="chart-context"
           >
             <template #default>
               本系统 Xbar-s 控制图（适用 n≥11）仅以下参数可用：
@@ -58,39 +157,112 @@
                 v-for="p in xbarSParams"
                 :key="p.id"
                 type="primary"
-                :underline="false"
+                underline="never"
                 class="xbar-s-link"
-                @click="selectedParamId = p.id"
+                @click="chartParamId = p.id"
               >{{ p.paramName }}（{{ p.subgroupSize }}）</el-link>
               。点击即可切换查看。
             </template>
           </el-alert>
-          <el-card shadow="never" class="chart-card" v-if="chartTypeOfSelected === 'Xbar-s'">
-            <XbarSChart :param-id="selectedParamId" />
-          </el-card>
-          <el-card shadow="never" class="chart-card" v-else>
-            <XbarRChart :param-id="selectedParamId" />
-          </el-card>
+          <div ref="chartCardRef">
+            <el-card shadow="hover" class="chart-card" v-if="chartTypeOfSelected === 'Xbar-s'">
+              <XbarSChart 
+                :param-id="chartParamId" 
+                :item-type="chartItemCode ? chartItemType || undefined : undefined" 
+                :item-code="chartItemCode || undefined"
+                :batch-no="chartBatchNo || undefined"
+                @subgroup-click="onSubgroupClick"
+              />
+            </el-card>
+            <el-card shadow="hover" class="chart-card" v-else>
+              <XbarRChart
+                :param-id="chartParamId"
+                :item-type="chartItemCode ? chartItemType || undefined : undefined"
+                :item-code="chartItemCode || undefined"
+                :batch-no="chartBatchNo || undefined"
+                @subgroup-click="onSubgroupClick"
+              />
+            </el-card>
+          </div>
+
+          <!-- 同工序其他参数快速切换 (P2-2) -->
+          <div v-if="sameProcessOtherParams.length" class="quick-switch">
+            <span class="quick-switch-label">同工序其他参数：</span>
+            <el-link
+              v-for="p in sameProcessOtherParams"
+              :key="p.id"
+              type="primary"
+              underline="never"
+              class="quick-switch-link"
+              @click="chartParamId = p.id"
+            >{{ p.paramName }}</el-link>
+          </div>
+
+          <!-- 子组历史明细 (P1-3 + P2-1) -->
+          <div ref="subgroupCardRef">
+            <el-card shadow="never" class="subgroup-card">
+              <SubgroupList 
+                ref="subgroupRef"
+                :param-id="chartParamId"
+                :item-code="chartItemCode || undefined"
+                :highlight-subgroup-no="highlightSubgroupNo"
+                @deleted="onSubgroupDeleted"
+              />
+            </el-card>
+          </div>
+
+          <!-- 悬浮锚点导航（仅控制图 tab 有参数时显示） -->
+          <div class="anchor-nav">
+            <div
+              class="anchor-item"
+              :class="{ active: activeAnchor === 'chart' }"
+              @click="scrollToSection('chart')"
+            >
+              <span class="anchor-dot"></span>
+              <span class="anchor-label">控制图</span>
+            </div>
+            <div
+              class="anchor-item"
+              :class="{ active: activeAnchor === 'subgroup' }"
+              @click="scrollToSection('subgroup')"
+            >
+              <span class="anchor-dot"></span>
+              <span class="anchor-label">子组明细</span>
+            </div>
+            <div class="anchor-divider"></div>
+            <div
+              class="anchor-item"
+              :class="{ active: activeAnchor === 'capability' }"
+              @click="switchToCapability"
+            >
+              <span class="anchor-dot external"></span>
+              <span class="anchor-label">过程能力</span>
+            </div>
+          </div>
         </template>
       </el-tab-pane>
 
       <el-tab-pane label="过程能力" name="capability">
-        <div v-if="!selectedParamId" class="need-param">请先在右上角选择分析参数</div>
+        <div v-if="!chartParamId" class="need-param">请先在控制图页选择分析参数</div>
         <template v-else>
           <el-row :gutter="16">
             <el-col :span="14">
               <el-card shadow="never" class="cap-card">
-                <CapabilityPanel :param-id="selectedParamId" />
+                <CapabilityPanel :param-id="chartParamId" />
               </el-card>
             </el-col>
             <el-col :span="10">
               <el-card shadow="never" class="cap-card">
-                <CapabilityTrend :param-id="selectedParamId" />
+                <CapabilityTrend
+                  :param-id="chartParamId"
+                  :item-type="chartItemCode ? chartItemType || undefined : undefined"
+                  :item-code="chartItemCode || undefined"
+                />
               </el-card>
             </el-col>
           </el-row>
           <el-card shadow="never" class="cap-card" style="margin-top: 16px">
-            <CapabilityHistogram :param-id="selectedParamId" />
+            <CapabilityHistogram :param-id="chartParamId" />
           </el-card>
         </template>
       </el-tab-pane>
@@ -99,9 +271,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
+import { storeToRefs } from 'pinia'
+import { Search, DataAnalysis } from '@element-plus/icons-vue'
 import { useSpcStore } from '@/stores/spc'
 import { useAuthStore } from '@/stores/auth'
+import { useItemTypeStore, type ItemType } from '@/stores/itemType'
+import { searchSpcItemsApi } from '@/api/spc'
+import type { SpcItemDict } from '@/api/spc'
 import ProcessConfig from './components/ProcessConfig.vue'
 import DataEntry from './components/DataEntry.vue'
 import XbarRChart from './components/XbarRChart.vue'
@@ -109,59 +287,366 @@ import XbarSChart from './components/XbarSChart.vue'
 import CapabilityPanel from './components/CapabilityPanel.vue'
 import CapabilityTrend from './components/CapabilityTrend.vue'
 import CapabilityHistogram from './components/CapabilityHistogram.vue'
+import SubgroupList from './components/SubgroupList.vue'
 
 const store = useSpcStore()
 const auth = useAuthStore()
+const route = useRoute()
 
-const activeTab = ref('config')
-const selectedParamId = ref<number | null>(null)
+const activeTab = ref<string>(route.query.tab === 'entry' || route.query.tab === 'chart' ? (route.query.tab as string) : 'config')
+// 分析参数（关键参数）提升为控制图 tab 局部状态，仅作用于控制图与过程能力，不再影响数据采集
+const chartParamId = ref<number | null>(null)
+// 工序下拉（控制图独立筛选）
+const chartProcessId = ref<number | null>(null)
+// 控制图关联的产品/物料维度：与数据采集、FAI 共用同一份持久化分类，避免同页两处状态割裂
+const itemTypeStore = useItemTypeStore()
+const { itemType: chartItemType } = storeToRefs(itemTypeStore)
+const chartItemCode = ref<string>('')
+/** 批次筛选（空=全部），从图表数据 availableBatches 动态填充选项 */
+const chartBatchNo = ref<string>('')
+const highlightSubgroupNo = ref<string | null>(null)
+const subgroupRef = ref<InstanceType<typeof SubgroupList> | null>(null)
+const chartCardRef = ref<HTMLElement | null>(null)
+const subgroupCardRef = ref<HTMLElement | null>(null)
+const activeAnchor = ref<'chart' | 'subgroup' | 'capability' | null>(null)
+const chartTypeLabel = computed(() => (chartItemType.value === 'PRODUCT' ? '产品' : '物料'))
+
+function onChartItemTypeChange(val: string | number | boolean | undefined) {
+  itemTypeStore.setItemType(val as ItemType)
+  // 分类切换后清空代码筛选，避免跨分类串数据
+  chartItemCode.value = ''
+  chartProcessId.value = null
+  chartParamId.value = null
+  lastChartCandidates = []
+  onChartFilter()
+}
+
+// 控制图代码框模糊搜索候选（统一代码字典：已签首件 ∪ 已激活标准，不再查 trace 表）
+let chartTimer: ReturnType<typeof setTimeout> | null = null
+let lastChartCandidates: SpcItemDict[] = []
+
+function chartQuerySearchAsync(queryString: string, cb: (results: SpcItemDict[]) => void) {
+  const keyword = (queryString || '').trim()
+  if (!keyword) {
+    cb([])
+    return
+  }
+  if (chartTimer) clearTimeout(chartTimer)
+  chartTimer = setTimeout(async () => {
+    try {
+      const res = await searchSpcItemsApi(keyword)
+      const list = res.data || []
+      lastChartCandidates = list
+      cb(list)
+    } catch {
+      cb([])
+    }
+  }, 300)
+}
+
+function onChartItemSelect(item: SpcItemDict) {
+  chartItemCode.value = item.itemCode || ''
+  onChartFilter()
+}
+
+// 手填/粘贴完整代码并失焦时，优先命中最近模糊候选，避免大小写/前后空格差异
+function onChartItemBlur() {
+  const code = (chartItemCode.value || '').trim()
+  if (!code) return
+  const hit = lastChartCandidates.find((c) => c.itemCode === code)
+  if (hit) {
+    chartItemCode.value = hit.itemCode || ''
+    onChartFilter()
+  }
+}
 
 const plantName = computed(() => auth.plantCode === 'MZ' ? '梅州' : '深圳')
 
-const groupedParams = computed(() => {
-  const map = new Map<string, any[]>()
-  for (const p of store.parameterList) {
-    const proc = store.processList.find((x) => x.id === p.processId)
-    const name = proc?.processName || '未分组'
-    if (!map.has(name)) map.set(name, [])
-    map.get(name)!.push(p)
-  }
-  return Array.from(map.entries()).map(([processName, params]) => ({ processName, params }))
-})
-
-const currentParam = computed(() =>
-  store.parameterList.find((p) => p.id === selectedParamId.value) || null,
+// 控制图参数下拉：按所选工序过滤
+const filteredChartParams = computed(() =>
+  chartProcessId.value
+    ? store.parameterList.filter((p) => p.processId === chartProcessId.value)
+    : [],
 )
-const chartTypeOfSelected = computed(() => currentParam.value?.chartType || 'Xbar-R')
+
+const chartCurrentParam = computed(() =>
+  store.parameterList.find((p) => p.id === chartParamId.value) || null,
+)
+const chartTypeOfSelected = computed(() => chartCurrentParam.value?.chartType || 'Xbar-R')
 const xbarSParams = computed(() =>
   store.parameterList.filter((p) => p.chartType === 'Xbar-s'),
 )
+
+function onChartFilter() {
+  // 同步产品/物料上下文到 spcStore（CapabilityPanel 等子组件通过 store 读取）
+  store.setChartItem(chartItemType.value, chartItemCode.value || undefined, chartBatchNo.value || undefined)
+  // 清除上次高亮
+  highlightSubgroupNo.value = null
+}
+
+// 工序切换时清空参数，用户需重新选择
+function onChartProcessChange() {
+  chartParamId.value = null
+  onChartFilter()
+}
+
+/** 控制图点击数据点/异常项 → 子组表定位 */
+function onSubgroupClick({ subgroupNo }: { subgroupIndex: number; subgroupNo: string }) {
+  // 设置高亮子组编号，SubgroupList 内的 watch 会自动滚动定位
+  highlightSubgroupNo.value = subgroupNo
+}
+
+/** 当前图表数据的可用批次（用于批次下拉选择器） */
+const currentChartBatches = computed(() => {
+  const src = store.chartDataXbarR || store.chartDataXbarS
+  return src?.availableBatches || []
+})
+
+/** 批次切换时触发图表刷新 */
+function onBatchChange() {
+  store.setChartItem(chartItemType.value, chartItemCode.value || undefined, chartBatchNo.value || undefined)
+  highlightSubgroupNo.value = null
+}
+
+/** 子组删除后刷新控制图数据 */
+function onSubgroupDeleted() {
+  // 子组变更后，图表组件会通过 watch 重新拉取数据
+}
+
+/** 同工序的其他参数（用于快速切换，P2-2） */
+const sameProcessOtherParams = computed(() => {
+  if (!chartParamId.value || !chartCurrentParam.value) return []
+  const pid = chartCurrentParam.value.processId
+  if (!pid) return []
+  return store.parameterList.filter(
+    (p) => p.processId === pid && p.id !== chartParamId.value,
+  )
+})
 
 function onSaved() {
   // 数据采集变更后，控制图 / 能力面板会在切换 tab 时按 paramId 重新拉取
 }
 
-onMounted(async () => {
+// 重新加载工序与参数（供错误卡片“重新加载”按钮使用）
+async function reload() {
   await store.fetchProcesses()
   await store.fetchParameters()
-  if (store.parameterList.length) {
-    selectedParamId.value = store.parameterList[0].id
+  if (!chartParamId.value && store.parameterList.length) {
+    chartParamId.value = store.parameterList[0].id
   }
+}
+
+// 来自 FAI「去采集」跳转：同步分类到共享 store、激活数据采集 tab、透传预填参数
+const faiPreset = ref<{ itemCode: string; processName: string; faiRecordId?: string }>({
+  itemCode: '',
+  processName: '',
+  faiRecordId: undefined,
+})
+
+function applyQueryFromFai() {
+  const q = route.query
+  if (!q || (q.itemType !== 'PRODUCT' && q.itemType !== 'MATERIAL')) return
+  // 1) 同步分类到共享 store（与 FAI / 数据采集同源；先设类型，避免 DataEntry 内 watch(itemType) 清空代码）
+  itemTypeStore.setItemType(q.itemType as ItemType)
+  // 2) 激活数据采集 tab
+  if (q.tab === 'entry' || q.tab === 'chart') {
+    activeTab.value = q.tab
+  }
+  // 3) 缓存预填值，透传给 DataEntry（DataEntry 在 tab 挂载时回填）
+  faiPreset.value = {
+    itemCode: typeof q.itemCode === 'string' ? q.itemCode : '',
+    processName: typeof q.processName === 'string' ? q.processName : '',
+    faiRecordId: typeof q.faiRecordId === 'string' ? q.faiRecordId : undefined,
+  }
+}
+
+onMounted(async () => {
+  await reload()
+  applyQueryFromFai()
+  setupAnchorObserver()
+})
+
+// ── 悬浮锚点导航 ──
+function scrollToSection(target: 'chart' | 'subgroup') {
+  const el = target === 'chart' ? chartCardRef.value : subgroupCardRef.value
+  if (!el) return
+  activeAnchor.value = target
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function switchToCapability() {
+  activeTab.value = 'capability'
+  activeAnchor.value = 'capability'
+}
+
+let anchorObserver: IntersectionObserver | null = null
+
+function setupAnchorObserver() {
+  // DOM 可能尚未渲染（v-if），延迟一帧
+  nextTick(() => {
+    const targets = [
+      { key: 'chart' as const, el: chartCardRef.value },
+      { key: 'subgroup' as const, el: subgroupCardRef.value },
+    ]
+    const els = targets.map((t) => t.el).filter((el): el is HTMLElement => !!el)
+    if (!els.length) return
+    anchorObserver = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)
+        if (visible.length) {
+          const match = targets.find((t) => t.el === visible[0].target)
+          if (match) activeAnchor.value = match.key
+        }
+      },
+      { rootMargin: '-15% 0px -50% 0px', threshold: [0, 0.3, 0.6] },
+    )
+    els.forEach((el) => anchorObserver!.observe(el))
+  })
+}
+
+onUnmounted(() => {
+  anchorObserver?.disconnect()
 })
 </script>
 
 <style scoped>
-.spc-page { padding: 16px 20px; }
+/* ── SPC 页面字体分层策略 ──
+ * L1 表格数据列 → tabular-nums 对齐 + 系统等宽回退
+ * L2 独立KPI数值 → JetBrains Mono 强制等宽（增强数据感）
+ * L3 标签描述   → 系统无衬线（默认）
+ */
+.spc-page {
+  font-variant-numeric: tabular-nums;
+  padding: 16px 20px;
+}
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 14px; }
 .page-title { margin: 0; font-size: 20px; color: #1B3A5B; font-weight: 700; }
 .page-sub { font-size: 12px; color: #8C9BA8; margin-top: 4px; }
 .head-param { display: flex; align-items: center; gap: 8px; }
 .head-param .lbl { font-size: 13px; color: #5B7A99; }
 .spc-tabs { --el-color-primary: #1B3A5B; }
-.chart-card, .cap-card { border: 1px solid #ECE7E1; }
-.need-param {
-  text-align: center; color: #8C9BA8; padding: 60px 0; font-size: 14px;
-  border: 1px dashed #ECE7E1; border-radius: 8px; background: #FAF8F5;
+
+/* 控制图筛选栏 */
+.chart-filterbar {
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  padding: 14px 18px; margin-bottom: 14px;
+  background: #FFFFFF; border: 1px solid #ECE7E1; border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(27, 58, 91, 0.04);
 }
+.filter-item { display: flex; align-items: center; gap: 8px; }
+.filter-item .lbl { font-size: 13px; color: #5B7A99; font-weight: 600; white-space: nowrap; }
+.filter-item.grow { flex: 1; min-width: 280px; }
+.code-input { width: 240px; }
+.code-input :deep(.el-input__prefix) { color: #8C9BA8; }
+.param-select { width: 100%; }
+.batch-select { width: 140px; margin-left: 8px; }
+.chart-context { margin-bottom: 12px; border-radius: 8px; }
+
+/* 控制图卡片 */
+.chart-card {
+  border: 1px solid #ECE7E1; border-radius: 10px;
+  transition: box-shadow .2s ease;
+}
+.cap-card { border: 1px solid #ECE7E1; }
+
+/* 未选参数空状态引导 */
+.need-param {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; padding: 72px 0; text-align: center;
+  border: 1px dashed #C9D6E2; border-radius: 10px; background: #FAF8F5;
+}
+.np-icon { font-size: 40px; color: #B7C4D2; margin-bottom: 4px; }
+.np-title { font-size: 15px; font-weight: 600; color: #5B7A99; }
+.np-sub { font-size: 12px; color: #8C9BA8; }
 .xbar-s-link { margin: 0 6px; font-size: 13px; }
+.barcode-option { display: flex; flex-direction: column; line-height: 1.3; }
+.barcode-option__code { font-weight: 600; color: var(--el-text-color-primary); }
+.barcode-option__meta { font-size: 12px; color: var(--el-text-color-secondary); }
+
+/* 同工序参数快速切换 (P2-2) */
+.quick-switch {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 10px 14px; margin-top: 10px;
+  background: #FAF8F5; border: 1px solid #ECE7E1; border-radius: 6px;
+}
+.quick-switch-label { font-size: 12px; color: #5B7A99; font-weight: 500; white-space: nowrap; }
+.quick-switch-link { font-size: 12px; padding: 2px 8px; border-radius: 3px; }
+.quick-switch-link:hover { background: #E8E3DA; }
+
+/* 子组卡片 */
+.subgroup-card { margin-top: 12px; }
+
+/* ── 悬浮锚点导航 ── */
+.anchor-nav {
+  position: fixed;
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  border: 1px solid #ECE7E1;
+  border-radius: 20px;
+  box-shadow: 0 2px 12px rgba(27, 58, 91, 0.06);
+}
+
+.anchor-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 0;
+  transition: opacity 0.2s;
+  opacity: 0.45;
+}
+
+.anchor-item:hover,
+.anchor-item.active {
+  opacity: 1;
+}
+
+.anchor-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #C9D6E2;
+  transition: background 0.25s, transform 0.25s;
+}
+
+.anchor-item.active .anchor-dot {
+  background: #1B3A5B;
+  transform: scale(1.4);
+}
+
+.anchor-dot.external {
+  background: transparent;
+  border: 1.5px dashed #C9D6E2;
+}
+
+.anchor-item.active .anchor-dot.external {
+  border-color: #1B3A5B;
+  background: #1B3A5B;
+}
+
+.anchor-label {
+  font-size: 12px;
+  color: #5B7A99;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.anchor-divider {
+  width: 16px;
+  height: 1px;
+  background: #ECE7E1;
+  margin: 4px 0;
+  align-self: center;
+}
 </style>

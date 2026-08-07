@@ -17,7 +17,6 @@
         <el-form :model="form" class="login-form" @submit.prevent="onLogin">
           <el-form-item label="账号"><el-input v-model="form.account" size="large" placeholder="选择账号或手动输入" :prefix-icon="User" @keyup.enter="focusPassword" /></el-form-item>
           <el-form-item label="密码"><el-input ref="pwdRef" v-model="form.password" size="large" type="password" show-password placeholder="请输入密码" :prefix-icon="Lock" @keyup.enter="onLogin" /></el-form-item>
-          <el-form-item label="所属分公司"><el-select v-model="form.plantCode" size="large" style="width:100%"><el-option label="深圳 · SZ" value="SZ" /><el-option label="梅州 · MZ" value="MZ" /></el-select></el-form-item>
           <p v-if="errMsg" class="login-error">{{ errMsg }}</p>
           <el-button native-type="submit" type="primary" size="large" class="login-button" :loading="loading">安全登录 <span>→</span></el-button>
         </el-form>
@@ -35,15 +34,15 @@ import { useRouter } from 'vue-router'
 import { Lock, User } from '@element-plus/icons-vue'
 import { getLoginDirectoryApi, loginApi } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
-import type { LoginDirectoryUser, PlantCode } from '@/types'
+import type { LoginDirectoryUser } from '@/types'
 
-const router = useRouter(); const auth = useAuthStore(); const pwdRef = ref(); const loading = ref(false); const directoryLoading = ref(false); const errMsg = ref(''); const accounts = ref<LoginDirectoryUser[]>([])
-const form = reactive({ account: '', password: '', plantCode: 'SZ' as PlantCode })
+const router = useRouter(); const auth = useAuthStore(); const pwdRef = ref<{ focus?: () => void } | null>(null); const loading = ref(false); const directoryLoading = ref(false); const errMsg = ref(''); const accounts = ref<LoginDirectoryUser[]>([])
+const form = reactive({ account: '', password: '' })
 const capabilities = [{ icon: '01', title: '统一质量数据', detail: '来料、过程与成品全链路协同' }, { icon: '02', title: '权限分级管理', detail: '角色、模块与数据范围统一管控' }, { icon: '03', title: '审计可追溯', detail: '关键质量动作保留完整记录' }]
-function focusPassword() { ;(pwdRef.value as any)?.focus?.() }
-function selectAccount(account: LoginDirectoryUser) { form.account = account.account; form.plantCode = account.plantCode; errMsg.value = ''; focusPassword() }
+function focusPassword() { ;(pwdRef.value as { focus?: () => void })?.focus?.() }
+function selectAccount(account: LoginDirectoryUser) { form.account = account.account; errMsg.value = ''; focusPassword() }
 async function loadDirectory() { directoryLoading.value = true; try { const res = await getLoginDirectoryApi(); accounts.value = res.data || [] } catch { accounts.value = [] } finally { directoryLoading.value = false } }
-async function onLogin() { errMsg.value = ''; if (!form.account || !form.password) { errMsg.value = '请输入账号和密码'; return }; loading.value = true; try { const res = await loginApi({ account: form.account.trim(), password: form.password, plantCode: form.plantCode }); if (res.code === 0 && res.data) { auth.setUser(res.data); router.push('/dashboard') } else { errMsg.value = res.message || '登录失败' } } catch { errMsg.value = '登录失败，请检查账号、密码与分公司' } finally { loading.value = false } }
+async function onLogin() { errMsg.value = ''; if (!form.account || !form.password) { errMsg.value = '请输入账号和密码'; return }; loading.value = true; try { const res = await loginApi({ account: form.account.trim(), password: form.password }); if (res.code === 0 && res.data) { auth.setUser(res.data); router.push('/dashboard') } else { errMsg.value = res.message || '登录失败' } } catch { errMsg.value = '登录失败，请检查账号与密码' } finally { loading.value = false } }
 onMounted(loadDirectory)
 </script>
 

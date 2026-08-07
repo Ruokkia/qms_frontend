@@ -53,6 +53,11 @@ export const useFaiStore = defineStore('fai', () => {
     return faiApi.createChangeTriggerApi(data)
   }
 
+  /** 作废变更触发 */
+  async function voidChangeTrigger(id: number, reason: string) {
+    return faiApi.voidChangeTriggerApi(id, reason)
+  }
+
   /** 从变更触发创建检验单 */
   async function createInspection(changeTriggerId: number) {
     return faiApi.createInspectionApi({ changeTriggerId })
@@ -107,6 +112,7 @@ export const useFaiStore = defineStore('fai', () => {
     fetchChangeTriggers,
     fetchInspections,
     createChangeTrigger,
+    voidChangeTrigger,
     createInspection,
     submitItems,
     reJudge,

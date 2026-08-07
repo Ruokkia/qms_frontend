@@ -15,15 +15,16 @@ import type {
   VerificationRecord,
 } from '@/types/exception'
 
+// 供应商代码对齐真实 ERP 体系（来源：qms-pg-dev 导出 material_inspection.supplier_code）
 const SUPPLIERS = [
-  { id: 1, name: '盛达电子' },
-  { id: 2, name: '华芯科技' },
-  { id: 3, name: '立精密' },
-  { id: 4, name: '鑫达材料' },
-  { id: 5, name: '远东精密' },
+  { id: 1, name: 'S2012073' },
+  { id: 2, name: 'S2014054' },
+  { id: 3, name: 'S2018022' },
+  { id: 4, name: 'S2009013' },
+  { id: 5, name: 'S2021042' },
 ]
 
-const SOURCE_TYPES = ['来料不良', '制程不良', '审核问题', '客户投诉', '重复问题']
+const SOURCE_TYPES = ['来料不良', '首件不良', '成品不良']
 const SEVERITIES = ['严重', '一般']
 const STATUSES = ['待整改', '整改中', '待验证', '已闭环']
 
@@ -53,7 +54,7 @@ function buildExceptions(): ExceptionOrder[] {
       status,
       supplierId: supplier.id,
       supplierName: supplier.name,
-      materialCode: `M00${(i % 5) + 1}`,
+      materialCode: ['99.11.100558', '10.09.200320', '10.99.990135', '99.99.004076', '20.18.990015'][i % 5],
       defectDesc: ['外观划伤', '尺寸超差', '引脚变形', '标识模糊', '性能偏差'][i % 5],
       defectQty: 12 + i,
       totalQty: 1000 + i * 50,

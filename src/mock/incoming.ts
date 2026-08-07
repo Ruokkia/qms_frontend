@@ -10,20 +10,21 @@ import type {
   MaterialInspectionStats,
 } from '@/types/incoming'
 
+// 供应商与物料代码对齐真实 ERP 编码体系（来源：qms-pg-dev 导出 material_inspection）
 const SUPPLIERS = [
-  { code: 'SUP-001', name: '盛达电子' },
-  { code: 'SUP-002', name: '华芯科技' },
-  { code: 'SUP-003', name: '立精密' },
-  { code: 'SUP-004', name: '鑫达材料' },
-  { code: 'SUP-005', name: '远东精密' },
+  { code: 'S2012073', name: '深圳康立供应商A' },
+  { code: 'S2014054', name: '深圳康立供应商B' },
+  { code: 'S2018022', name: '深圳康立供应商C' },
+  { code: 'S2009013', name: '深圳康立供应商D' },
+  { code: 'S2021042', name: '深圳康立供应商E' },
 ]
 
 const MATERIALS = [
-  { code: 'M001', name: '电容-0805', spec: '10uF/16V' },
-  { code: 'M002', name: '芯片-MCU', spec: 'STM32F103' },
-  { code: 'M003', name: '外壳-B型', spec: 'ABS阻燃' },
-  { code: 'M004', name: '传感器', spec: '压力0.5MPa' },
-  { code: 'M005', name: '连接器', spec: '4Pin防水' },
+  { code: '99.11.100558', name: '可充电式电批', spec: '扭矩0.5N·m' },
+  { code: '10.09.200320', name: 'A26', spec: '通用件' },
+  { code: '10.99.990135', name: 'EP离心管', spec: '50mL' },
+  { code: '99.99.004076', name: '奶瓶重力球', spec: '食品级' },
+  { code: '20.18.990015', name: '超声板PCBA', spec: '控制板' },
 ]
 
 const DEFECTS = ['外观划伤', '尺寸超差', '引脚变形', '标识模糊', '包装破损', '性能偏差']

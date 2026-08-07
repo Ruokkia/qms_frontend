@@ -41,11 +41,27 @@
         <el-form-item label="整改目标">
           <el-input v-model="form.objective" type="textarea" :rows="2" placeholder="请输入整改目标" />
         </el-form-item>
-        <el-form-item label="负责人">
-          <el-input v-model="form.ownerName" placeholder="请输入负责人姓名" />
-        </el-form-item>
-        <el-form-item label="负责人ID">
-          <el-input-number v-model="form.ownerId" :min="1" controls-position="right" style="width: 100%" />
+        <el-form-item label="负责人" prop="ownerId">
+          <el-select
+            v-model="form.ownerId"
+            :placeholder="props.ownerName ? '已默认带入：' + props.ownerName : '请选择负责人'"
+            filterable
+            style="width: 100%"
+            @change="onOwnerChange"
+          >
+            <el-option
+              v-for="u in userOptions"
+              :key="u.id"
+              :label="`${u.realName}（${u.account}·${u.roleCode}）`"
+              :value="u.id"
+            />
+            <!-- 兜底：负责人不在当前分公司可选项内时，仍显示其姓名而非 ID -->
+            <el-option
+              v-if="ownerIdMissingInOptions"
+              :label="formOwnerNameFallback"
+              :value="form.ownerId!"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="计划开始">
           <el-date-picker v-model="form.planStartDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%" />
@@ -74,29 +90,72 @@
 
 <script setup lang="ts">
 // ===== M2: 整改计划管理组件（与改善措施区分的独立对象） =====
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   createRectificationPlanApi,
   updateRectificationPlanApi,
   deleteRectificationPlanApi,
 } from '@/api/rectification-plan'
+import { getAdminUsers } from '@/api/admin'
+import { useAuthStore } from '@/stores/auth'
 import { RECTIFICATION_PLAN_STATUS_COLORS } from '@/enums/exception'
 import type { RectificationPlan } from '@/types/exception'
+import type { AdminUser } from '@/types'
 
 const props = defineProps<{
   exceptionId: number
   plans: RectificationPlan[]
   readonly?: boolean
+  /** 异常单已指定的责任人，新增计划时默认带入 */
+  ownerId?: number
+  ownerName?: string
 }>()
 
 const emit = defineEmits<{
   (e: 'changed'): void
 }>()
 
+const authStore = useAuthStore()
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const submitLoading = ref(false)
+
+// 人员下拉数据源：仅展示当前分公司启用用户，供负责人选择
+const userOptions = ref<AdminUser[]>([])
+
+async function loadUserOptions() {
+  try {
+    const res = await getAdminUsers()
+    if (res.code === 0) {
+      const plant = authStore.plantCode
+      userOptions.value = res.data.filter((u) => !plant || u.plantCode === plant)
+    }
+  } catch (e) {
+    console.error('加载人员列表失败', e)
+  }
+}
+
+function ownerNameById(id?: number) {
+  if (!id) return ''
+  return userOptions.value.find((u) => u.id === id)?.realName || ''
+}
+
+// 当前选中的负责人 ID 是否不在可选项列表中（如责任人属其他分公司）
+const ownerIdMissingInOptions = computed(
+  () => !!form.value.ownerId && !userOptions.value.some((u) => u.id === form.value.ownerId),
+)
+
+// 兜底显示：当负责人不在默认可选项时的展示文本
+const formOwnerNameFallback = computed(
+  () => form.value.ownerName || ('ID ' + form.value.ownerId),
+)
+
+// 选择负责人后联动回填 ownerName，保证 ID 与姓名一致
+function onOwnerChange(id: number) {
+  form.value.ownerId = id
+  form.value.ownerName = ownerNameById(id)
+}
 
 const defaultForm = {
   id: undefined as number | undefined,
@@ -131,10 +190,18 @@ function openForm(row?: RectificationPlan) {
       remark: row.remark || '',
     }
   } else {
-    form.value = { ...defaultForm, exceptionId: props.exceptionId }
+    form.value = {
+      ...defaultForm,
+      exceptionId: props.exceptionId,
+      // 默认带入异常单已指定的责任人
+      ownerId: props.ownerId,
+      ownerName: props.ownerName || '',
+    }
   }
   dialogVisible.value = true
 }
+
+onMounted(loadUserOptions)
 
 async function submit() {
   if (!form.value.planName.trim()) {

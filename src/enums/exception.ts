@@ -8,6 +8,7 @@
 /** 异常来源类型 */
 export enum ExceptionSourceTypeEnum {
   INCOMING_DEFECT = '来料不良',
+  FAI_DEFECT = '首件不良',
   PROCESS_DEFECT = '制程不良',
   AUDIT_ISSUE = '审核问题',
   CUSTOMER_COMPLAINT = '客户投诉',
@@ -107,8 +108,9 @@ export enum CapaStatusEnum {
   COMPLETED = '已完成',
 }
 
-/** 8D 步骤 */
+/** 8D 步骤。D0 为质量部发起立案，不在推进步骤链内（仅作立案信息展示），故不在 EightDStepEnum 的步骤流转中使用 */
 export enum EightDStepEnum {
+  D0 = 'D0',
   D1 = 'D1',
   D2 = 'D2',
   D3 = 'D3',
@@ -119,11 +121,46 @@ export enum EightDStepEnum {
   D8 = 'D8',
 }
 
+/** CAPA 阶段（C1 措施制定 → C2 措施审批 → C3 措施实施 → C4 效果验证） */
+export enum CapaStepEnum {
+  C1 = 'C1',
+  C2 = 'C2',
+  C3 = 'C3',
+  C4 = 'C4',
+}
+
 /** CAPA 状态 → 状态色 */
 export const CAPA_STATUS_COLORS: Record<string, string> = {
   [CapaStatusEnum.NOT_STARTED]: '#8C9BA8',
   [CapaStatusEnum.IN_PROGRESS]: '#B8763E',
   [CapaStatusEnum.COMPLETED]: '#3E7A4E',
+}
+
+/** 阶段审批状态 */
+export enum StepStatusEnum {
+  DRAFT = 'DRAFT',
+  SUBMITTED = 'SUBMITTED',
+  PENDING_APPROVAL = 'PENDING_APPROVAL',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+}
+
+/** 阶段审批状态 → 中文标签 */
+export const STEP_STATUS_LABELS: Record<string, string> = {
+  [StepStatusEnum.DRAFT]: '草稿',
+  [StepStatusEnum.SUBMITTED]: '已提交',
+  [StepStatusEnum.PENDING_APPROVAL]: '待审批',
+  [StepStatusEnum.APPROVED]: '已通过',
+  [StepStatusEnum.REJECTED]: '已驳回',
+}
+
+/** 阶段审批状态 → 状态色 */
+export const STEP_STATUS_COLORS: Record<string, string> = {
+  [StepStatusEnum.DRAFT]: '#8C9BA8',
+  [StepStatusEnum.SUBMITTED]: '#3E6B95',
+  [StepStatusEnum.PENDING_APPROVAL]: '#B8763E',
+  [StepStatusEnum.APPROVED]: '#3E7A4E',
+  [StepStatusEnum.REJECTED]: '#B84B3E',
 }
 
 /** 整改流程类型 */
@@ -157,8 +194,34 @@ export function processIncludes8D(type?: string): boolean {
   return type === ProcessTypeEnum.EIGHT_D || type === ProcessTypeEnum.BOTH
 }
 
+/**
+ * CAPA 治理相位（BOTH 模式专用）。
+ * 与后端 exception_order.capa_phase 字段值严格一致。
+ *
+ * 编排：
+ *   INITIATE              → CAPA 立项，8D D1-D4 自由推进
+ *   ROOT_CAUSE_APPROVED   → 根因审批通过，8D D5 准入
+ *   MEASURES_APPROVED     → 措施审批通过，8D D6-D8 准入
+ *   CLOSED                → 已闭环
+ */
+export enum CapaPhaseEnum {
+  INITIATE = 'INITIATE',
+  ROOT_CAUSE_APPROVED = 'ROOT_CAUSE_APPROVED',
+  MEASURES_APPROVED = 'MEASURES_APPROVED',
+  CLOSED = 'CLOSED',
+}
+
+/** CAPA 相位 → 中文标签 */
+export const CAPA_PHASE_LABELS: Record<string, string> = {
+  [CapaPhaseEnum.INITIATE]: '立项中',
+  [CapaPhaseEnum.ROOT_CAUSE_APPROVED]: '根因已审批',
+  [CapaPhaseEnum.MEASURES_APPROVED]: '措施已审批',
+  [CapaPhaseEnum.CLOSED]: '已闭环',
+}
+
 /** 8D 步骤标签 */
 export const EIGHT_D_STEP_LABELS: Record<string, string> = {
+  [EightDStepEnum.D0]: 'D0 发起立案',
   [EightDStepEnum.D1]: 'D1 团队成立',
   [EightDStepEnum.D2]: 'D2 问题描述',
   [EightDStepEnum.D3]: 'D3 临时遏制',
@@ -169,7 +232,10 @@ export const EIGHT_D_STEP_LABELS: Record<string, string> = {
   [EightDStepEnum.D8]: 'D8 团队表彰',
 }
 
-/** 8D 步骤顺序 */
+/**
+ * 8D 推进步骤顺序（D1-D8）。
+ * D0 质量部发起立案不进入步骤链，仅作为立案信息展示区（见 detail.vue / ExceptionEightD.vue）。
+ */
 export const EIGHT_D_STEP_ORDER: string[] = [
   EightDStepEnum.D1,
   EightDStepEnum.D2,
@@ -179,6 +245,22 @@ export const EIGHT_D_STEP_ORDER: string[] = [
   EightDStepEnum.D6,
   EightDStepEnum.D7,
   EightDStepEnum.D8,
+]
+
+/** CAPA 阶段标签 */
+export const CAPA_STEP_LABELS: Record<string, string> = {
+  [CapaStepEnum.C1]: 'C1 措施制定',
+  [CapaStepEnum.C2]: 'C2 措施审批',
+  [CapaStepEnum.C3]: 'C3 措施实施',
+  [CapaStepEnum.C4]: 'C4 效果验证',
+}
+
+/** CAPA 阶段顺序 */
+export const CAPA_STEP_ORDER: string[] = [
+  CapaStepEnum.C1,
+  CapaStepEnum.C2,
+  CapaStepEnum.C3,
+  CapaStepEnum.C4,
 ]
 
 /** 多维度分析维度 */

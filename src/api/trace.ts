@@ -23,6 +23,7 @@ interface RawTraceNode {
   materialBatchNo: string | null
   plantCode?: string
   category?: string
+  sonLotNo?: string | null
   children?: RawTraceNode[]
   upward?: RawTraceNode[]
 }
@@ -57,10 +58,11 @@ export function searchItemsByBarcodeApi(
   itemType: 'PRODUCT' | 'MATERIAL',
   keyword: string,
   limit = 20,
+  itemCode?: string,
 ): Promise<ApiResult<TraceItemSearchResult[]>> {
   return apiGet<TraceItemSearchResult[]>('/incoming-trace/search', {
     baseURL: '/api/v2',
-    params: { itemType, keyword, limit },
+    params: { itemType, keyword, limit, ...(itemCode ? { itemCode } : {}) },
   })
 }
 
@@ -94,17 +96,21 @@ export function traceQueryApi(
   })
 }
 
-/** 节点详情（含批次信息）— 需传 type 参数（fg=成品表, mi=物料表） */
-export function getTraceNodeDetailApi(id: number, type: 'fg' | 'mi'): Promise<ApiResult<TraceNodeDetail>> {
+/** 节点详情（含批次信息）— 需传 type 参数（fg=成品表, mi=物料表）；sonLotNo 为半成品子项批号（可选） */
+export function getTraceNodeDetailApi(
+  id: string | number,
+  type: 'fg' | 'mi',
+  sonLotNo?: string
+): Promise<ApiResult<TraceNodeDetail>> {
   return axios.get(`${incomingTraceBase}/nodes/${id}`, {
-    params: { type },
+    params: { type, sonLotNo },
     headers: buildTraceAuthorizationHeaders(
       sessionStorage.getItem('qms_token'),
       sessionStorage.getItem('qms_region'),
     ),
   }).then((response: AxiosResponse<ApiResult<RawTraceNode>>) => {
     const raw = response.data.data!
-    const convert = (n: RawTraceNode): TraceNode => ({ id: n.id, nodeType: n.nodeType, nodeCode: n.barcode, name: n.name, productCode: n.productCode ?? undefined, specification: n.specification ?? undefined, materialCode: n.materialCode ?? undefined, materialBatchNo: n.materialBatchNo ?? undefined, parentId: null, children: (n.children || []).map(convert), batchInfo: n.materialBatchNo ? { batchNo: n.materialBatchNo, materialCode: n.materialCode ?? undefined, materialName: n.name } : null })
+    const convert = (n: RawTraceNode): TraceNode => ({ id: n.id, nodeType: n.nodeType, nodeCode: n.barcode, name: n.name, productCode: n.productCode ?? undefined, specification: n.specification ?? undefined, materialCode: n.materialCode ?? undefined, materialBatchNo: n.materialBatchNo ?? undefined, parentId: null, sonLotNo: n.sonLotNo ?? undefined, children: (n.children || []).map(convert), batchInfo: n.materialBatchNo ? { batchNo: n.materialBatchNo, materialCode: n.materialCode ?? undefined, materialName: n.name } : null })
     const detail = convert(raw)
     return { code: 0, message: 'success', data: { detail, children: detail.children || [] } } as ApiResult<TraceNodeDetail>
   })

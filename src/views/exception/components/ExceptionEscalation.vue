@@ -304,10 +304,10 @@ function openWorkflow(row: Escalation) {
 function stageLabel(stage?: string) { return ({ PENDING_REVIEW: '待审核', PLAN: '制定措施', EXECUTION: '执行跟踪', VERIFICATION: '效果验证', PENDING_CLOSE_APPROVAL: '待关闭审批', CLOSED: '已关闭', REJECTED: '已驳回' } as Record<string, string>)[stage || ''] || '待审核' }
 function stageIndex(stage?: string) { return ({ PENDING_REVIEW: 1, PLAN: 2, EXECUTION: 3, VERIFICATION: 4, PENDING_CLOSE_APPROVAL: 5, CLOSED: 6 } as Record<string, number>)[stage || ''] || 1 }
 async function refreshWorkflow(call: Promise<any>, text: string) { const res = await call; if (res.code === 0) { workflowRow.value = res.data; ElMessage.success(text); loadList() } }
-async function submitPlan() { if (!workflowRow.value || !workflowForm.actionPlan || !workflowForm.ownerName) return ElMessage.warning('请填写措施和责任人'); await refreshWorkflow(submitEscalationPlanApi(workflowRow.value.id, workflowForm), '升级措施已提交') }
-async function submitExecution() { if (!workflowRow.value || !workflowForm.executionRecord) return ElMessage.warning('请填写执行记录'); await refreshWorkflow(submitEscalationExecutionApi(workflowRow.value.id, { executionRecord: workflowForm.executionRecord }), '执行记录已提交') }
-async function submitVerification() { if (!workflowRow.value || !workflowForm.evidence) return ElMessage.warning('请填写验证依据'); await refreshWorkflow(submitEscalationVerificationApi(workflowRow.value.id, { result: workflowForm.result, evidence: workflowForm.evidence }), '验证结果已提交') }
-async function submitClose() { if (!workflowRow.value || !workflowForm.reason) return ElMessage.warning('请填写审批意见'); await refreshWorkflow(closeEscalationApi(workflowRow.value.id, { reason: workflowForm.reason }), '升级单已关闭') }
+async function submitPlan() { if (!workflowRow.value || !workflowForm.actionPlan || !workflowForm.ownerName) { return ElMessage.warning('请填写措施和责任人'); } await refreshWorkflow(submitEscalationPlanApi(workflowRow.value.id, workflowForm), '升级措施已提交') }
+async function submitExecution() { if (!workflowRow.value || !workflowForm.executionRecord) { return ElMessage.warning('请填写执行记录'); } await refreshWorkflow(submitEscalationExecutionApi(workflowRow.value.id, { executionRecord: workflowForm.executionRecord }), '执行记录已提交') }
+async function submitVerification() { if (!workflowRow.value || !workflowForm.evidence) { return ElMessage.warning('请填写验证依据'); } await refreshWorkflow(submitEscalationVerificationApi(workflowRow.value.id, { result: workflowForm.result, evidence: workflowForm.evidence }), '验证结果已提交') }
+async function submitClose() { if (!workflowRow.value || !workflowForm.reason) { return ElMessage.warning('请填写审批意见'); } await refreshWorkflow(closeEscalationApi(workflowRow.value.id, { reason: workflowForm.reason }), '升级单已关闭') }
 
 function statusColor(v: string) {
   if (v === 'PENDING_REVIEW') return '#B8763E'

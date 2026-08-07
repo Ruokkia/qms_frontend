@@ -16,6 +16,12 @@ import type {
   EscalationCheckResultVO,
   EightDReport,
   EightDSaveDTO,
+  ExceptionInitiateDTO,
+  EightDD1TeamDTO,
+  EightDD1ReviewDTO,
+  ExceptionUserOptionVO,
+  StageApprovalDTO,
+  ExceptionApprovalConfigVO,
   SupplierExceptionSummary,
   AuditLog,
   CloseReadinessVO,
@@ -53,19 +59,22 @@ export function deleteExceptionApi(id: number): Promise<ApiResult<void>> {
   return apiDelete<void>(`${BASE}/${id}`)
 }
 
+/** 人员选项列表（选择责任人 / 组建 8D 团队 / 指派 CAPA 负责人） */
+export function getUserOptionsApi(): Promise<ApiResult<ExceptionUserOptionVO[]>> {
+  return apiGet<ExceptionUserOptionVO[]>(`${BASE}/user-options`)
+}
+
 /** 异常闭环 */
 export function closeExceptionApi(id: number, data: ExceptionCloseDTO): Promise<ApiResult<void>> {
   return apiPost<void>(`${BASE}/${id}/close`, data)
 }
 
-/** 发起整改流程（选择 CAPA / 8D / BOTH，capaStatus 待发起→进行中） */
+/** 发起整改流程（D0 立案 + 指派；质量部门手动选择 CAPA / 8D / BOTH） */
 export function initiateProcessApi(
   id: number,
-  processType: string,
+  data: ExceptionInitiateDTO,
 ): Promise<ApiResult<ExceptionOrder>> {
-  return apiPost<ExceptionOrder>(`${BASE}/${id}/initiate`, null, {
-    params: { processType },
-  })
+  return apiPost<ExceptionOrder>(`${BASE}/${id}/initiate`, data)
 }
 
 /** KPI 看板统计 */
@@ -107,14 +116,46 @@ export function saveEightDApi(
   return apiPut<EightDReport>(`${BASE}/${exceptionId}/eight-d`, data)
 }
 
-/** 提交 8D 到下一步 */
+/** 提交 8D/CAPA 到下一步（阶段级审批拦截） */
 export function nextStepEightDApi(exceptionId: number): Promise<ApiResult<EightDReport>> {
   return apiPost<EightDReport>(`${BASE}/${exceptionId}/eight-d/next-step`)
+}
+
+/** 阶段审批通过 */
+export function approveStageApi(
+  exceptionId: number,
+  data: StageApprovalDTO,
+): Promise<ApiResult<EightDReport>> {
+  return apiPost<EightDReport>(`${BASE}/${exceptionId}/eight-d/approve`, data)
+}
+
+/** 阶段审批驳回（回退上一阶段重新填写） */
+export function rejectStageApi(
+  exceptionId: number,
+  data: StageApprovalDTO,
+): Promise<ApiResult<EightDReport>> {
+  return apiPost<EightDReport>(`${BASE}/${exceptionId}/eight-d/reject`, data)
 }
 
 /** 查询 8D 步骤留痕 */
 export function getEightDHistoryApi(exceptionId: number): Promise<ApiResult<EightDStepLogVO[]>> {
   return apiGet<EightDStepLogVO[]>(`${BASE}/${exceptionId}/eight-d/history`)
+}
+
+/** D1 团队提交（负责人自行组建团队后提交质量部审核） */
+export function submitD1TeamApi(
+  exceptionId: number,
+  data: EightDD1TeamDTO,
+): Promise<ApiResult<EightDReport>> {
+  return apiPost<EightDReport>(`${BASE}/${exceptionId}/eight-d/d1/team/submit`, data)
+}
+
+/** D1 团队审核（质量部门审核团队构成） */
+export function reviewD1TeamApi(
+  exceptionId: number,
+  data: EightDD1ReviewDTO,
+): Promise<ApiResult<EightDReport>> {
+  return apiPost<EightDReport>(`${BASE}/${exceptionId}/eight-d/d1/team/review`, data)
 }
 
 /** 供应商来料不良频次汇总 */
@@ -142,6 +183,24 @@ export function resetExceptionApi(id: number): Promise<ApiResult<void>> {
   return apiPost<void>(`${BASE}/${id}/reset`)
 }
 
+// ===== CAPA 相位审批（BOTH 模式专用） =====
+
+/** CAPA 根因审批（BOTH 模式：8D D4 完成后 CAPA 质量部门审批根因分析结果） */
+export function approveCapaRootCauseApi(
+  id: number,
+  comment: string,
+): Promise<ApiResult<void>> {
+  return apiPost<void>(`${BASE}/${id}/capa/approve-root-cause`, { comment })
+}
+
+/** CAPA 措施审批（BOTH 模式：8D D5 完成后 CAPA 质量部门审批措施方案） */
+export function approveCapaMeasuresApi(
+  id: number,
+  comment: string,
+): Promise<ApiResult<void>> {
+  return apiPost<void>(`${BASE}/${id}/capa/approve-measures`, { comment })
+}
+
 /** 根据来源 ID 查找关联异常单 */
 export function getExceptionBySourceIdApi(sourceId: number): Promise<ApiResult<number | null>> {
   return apiGet<number | null>(`${BASE}/by-source/${sourceId}`)
@@ -150,5 +209,26 @@ export function getExceptionBySourceIdApi(sourceId: number): Promise<ApiResult<n
 /** 从来料检验记录创建异常整改单 */
 export function createExceptionFromInspectionApi(inspectionId: number): Promise<ApiResult<ExceptionOrder>> {
   return apiPost<ExceptionOrder>(`${BASE}/from-inspection/${inspectionId}`)
+}
+
+// ===== 阶段级审批配置（系统管理模块，/api/v1/admin/approval-config） =====
+
+/** 查询某流程维度（8D / CAPA）的阶段审批配置 */
+export function getApprovalConfigListApi(
+  processFlow: string,
+): Promise<ApiResult<ExceptionApprovalConfigVO[]>> {
+  return apiGet<ExceptionApprovalConfigVO[]>(`/admin/approval-config/${processFlow}`)
+}
+
+/** 保存/更新一条阶段审批配置 */
+export function saveApprovalConfigApi(
+  data: Partial<ExceptionApprovalConfigVO>,
+): Promise<ApiResult<void>> {
+  return apiPost<void>('/admin/approval-config', data)
+}
+
+/** 删除一条阶段审批配置 */
+export function deleteApprovalConfigApi(id: number): Promise<ApiResult<void>> {
+  return apiDelete<void>(`/admin/approval-config/${id}`)
 }
 

@@ -6,9 +6,6 @@
         <h2>成品数据管理</h2>
         <span class="breadcrumb">来料与成品质量管控 / 成品入库检验审核</span>
       </div>
-      <div class="header-actions">
-        <el-button type="primary" size="default" @click="openCreate">新增</el-button>
-      </div>
     </div>
 
     <!-- 筛选行 -->
@@ -117,7 +114,12 @@
           <template #default="{ row }">
             <div class="table-actions">
               <button class="text-btn" @click="openDetail(row.id)">详情</button>
-              <button class="text-btn text-btn-trace" @click="openTrace(row)">&#36861;&#28335;</button>
+              <!-- 追溯按钮：prod_batch_or_sn 含 "-"（批号）时隐藏，仅唯一条码（无 "-"）可追溯 -->
+              <button
+                v-if="!row.prodBatchOrSn || !String(row.prodBatchOrSn).includes('-')"
+                class="text-btn text-btn-trace"
+                @click="openTrace(row)"
+              >&#36861;&#28335;</button>
               <el-dropdown trigger="click">
                 <button class="text-btn table-more-btn" type="button">更多</button>
                 <template #dropdown>
@@ -151,6 +153,7 @@
       v-model="detailVisible"
       :detail="detail"
       :edit-mode="detailEditMode"
+      :saving="savingDetail"
       @saved="onDetailSaved"
     />
 
@@ -214,6 +217,15 @@
             <el-descriptions-item label="规格型号">{{ selectedChild.specModel || '-' }}</el-descriptions-item>
             <el-descriptions-item label="分类">{{ bindCategory }}</el-descriptions-item>
           </el-descriptions>
+          <!-- 子项批号：仅半成品绑定显示（详情展示用，不影响追溯链路） -->
+          <div v-if="bindCategory === '半成品'" style="margin-top:10px">
+            <el-input
+              v-model="bindSonLotNo"
+              placeholder="请输入子项批号（半成品详情报文号用）"
+              clearable
+              style="width:100%"
+            />
+          </div>
         </div>
 
         <!-- 绑定结果 -->
@@ -240,16 +252,17 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { runWithSavingState } from '@/utils/detail-save-state'
 import { useRouter } from 'vue-router'
 import {
   getFinishedGoodsListApi,
   getFinishedGoodsDetailApi,
-  createFinishedGoodsApi,
   updateFinishedGoodsApi,
   deleteFinishedGoodsApi,
 } from '@/api/finishedGoods'
 import { getMaterialInspectionListApi, searchChildrenApi, createBindingApi } from '@/api/incoming'
 import type { SearchChildrenItem } from '@/api/incoming'
+import { TraceDirectionEnum } from '@/enums/trace'
 import { getErrorMessage, isErrorNotified } from '@/api/request-error'
 import type { FinishedGoodsInspection, FinishedGoodsListParams } from '@/types/finishedGoods'
 import type { MaterialInspection, MaterialInspectionListParams } from '@/types/incoming'
@@ -356,17 +369,20 @@ async function loadList() {
   }
 }
 
-// ── 详情弹窗（查看/新增/编辑）─────────────────────────────────
+// ── 详情弹窗（查看/编辑）─────────────────────────────────────
 const detailVisible = ref(false)
 const detail = ref<FinishedGoodsInspection | null>(null)
 const detailEditMode = ref(false)
+const savingDetail = ref(false)
 
 function openTrace(row: FinishedGoodsInspection) {
   if (!row.prodBatchOrSn) {
     ElMessage.warning('该成品记录无产品批号/SN，无法追溯')
     return
   }
-  router.push({ path: '/trace', query: { code: row.prodBatchOrSn, direction: 'full' } })
+  // direction 动态化：半成品行 → FULL（上下双向查）；成品行 → FORWARD（只向下查）
+  const direction = row.category === '半成品' ? TraceDirectionEnum.FULL : TraceDirectionEnum.FORWARD
+  router.push({ path: '/trace', query: { code: row.prodBatchOrSn, direction } })
 }
 async function openDetail(id: number) {
   try {
@@ -379,12 +395,6 @@ async function openDetail(id: number) {
   } catch (e) {
     console.error('加载详情失败', e)
   }
-}
-
-function openCreate() {
-  detail.value = null
-  detailEditMode.value = true
-  detailVisible.value = true
 }
 
 async function openEdit(id: number) {
@@ -401,26 +411,21 @@ async function openEdit(id: number) {
 }
 
 async function onDetailSaved(data: Partial<FinishedGoodsInspection>) {
-  try {
+  await runWithSavingState((saving) => { savingDetail.value = saving }, async () => {
     if (!data.id) {
-      const res = await createFinishedGoodsApi(data)
-      if (res.code === 0) {
-        ElMessage.success('新增成功')
-        detailVisible.value = false
-        loadList()
-      }
-    } else {
-      const res = await updateFinishedGoodsApi(data.id, data)
-      if (res.code === 0) {
-        ElMessage.success('更新成功')
-        detailVisible.value = false
-        loadList()
-      }
+      ElMessage.error('缺少记录ID，无法保存修改')
+      return
     }
-  } catch (e: any) {
+    const res = await updateFinishedGoodsApi(data.id, data)
+    if (res.code === 0) {
+      ElMessage.success('更新成功')
+      detailVisible.value = false
+      loadList()
+    }
+  }).catch((e: any) => {
     if (!isErrorNotified(e)) ElMessage.error(`保存失败：${getErrorMessage(e)}`)
     console.error('保存成品检验记录失败', e)
-  }
+  })
 }
 
 // ── 删除 ──────────────────────────────────────────────────────
@@ -448,6 +453,8 @@ const bindFg = ref<FinishedGoodsInspection | null>(null)
 const bindCategory = ref<'半成品' | '物料'>('物料')
 const bindBarcodeKeyword = ref('')
 const bindNameKeyword = ref('')
+/** 子项批号（半成品绑定必填，详情展示用） */
+const bindSonLotNo = ref('')
 const bindResultMsg = ref<string | null>(null)
 const bindSuccess = ref(false)
 const queryingChildren = ref(false)
@@ -463,6 +470,7 @@ function openBind(row: FinishedGoodsInspection) {
   bindCategory.value = '物料'
   bindBarcodeKeyword.value = ''
   bindNameKeyword.value = ''
+  bindSonLotNo.value = ''
   childrenResults.value = []
   childrenTotal.value = 0
   childrenPage.value = 1
@@ -529,6 +537,7 @@ async function doBind() {
       materialBarcode: selectedChild.value.barcode,
       materialCode: selectedChild.value.materialCode,
       materialName: selectedChild.value.name,
+      sonLotNo: bindCategory.value === '半成品' ? bindSonLotNo.value.trim() || undefined : undefined,
       specModel: selectedChild.value.specModel,
     })
     if (res.code === 0) {
