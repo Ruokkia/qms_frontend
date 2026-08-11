@@ -225,7 +225,10 @@
             <span v-else class="muted">{{ approverRoleLabel(activeStep) }} 审批中…</span>
           </template>
 
-          <!-- 非待审批：普通填写操作 -->
+        <!-- 非待审批：普通填写操作 -->
+        <template v-else>
+          <!-- 最后一步（D8 等）提交闭环后，8D 报告即结束，不再展示保存/上一步 -->
+          <span v-if="isLastStepClosed" class="muted">8D 报告已完成并闭环，可前往后续阶段继续处理。</span>
           <template v-else>
             <el-button v-if="!stepReadonly" type="primary" :loading="saveLoading" @click="save">
               保存
@@ -238,10 +241,11 @@
             >
               提交到下一步
             </el-button>
-            <el-button v-if="!stepReadonly && activeStep !== firstStep" :loading="prevLoading" @click="prevStep">
+            <el-button v-if="!stepReadonly && activeStep !== firstStep && activeStep !== lastStep" :loading="prevLoading" @click="prevStep">
               上一步
             </el-button>
           </template>
+        </template>
         </template>
       </div>
 
@@ -414,6 +418,11 @@ const processTypeTagType = computed(() => {
 
 const firstStep = computed(() => stepOrder.value[0])
 const lastStep = computed(() => stepOrder.value[stepOrder.value.length - 1])
+
+// 最后一步（如 D8）提交闭环后：8D 报告即结束，操作区不再展示保存/上一步
+const isLastStepClosed = computed(
+  () => activeStep.value === lastStep.value && activeStatus.value !== 'DRAFT',
+)
 
 // 后端真实所处阶段的状态（操作区以此为准，不被查看步骤影响）
 const activeStatus = computed(() => stepStatus.value)
@@ -687,6 +696,10 @@ async function save() {
       ElMessage.success('保存成功')
       currentVersion.value = res.data.version
       stepStatus.value = res.data.stepStatus || stepStatus.value
+      // 最后一步（D8 等）保存即闭环：本地标记完成，隐藏操作按钮
+      if (activeStep.value === lastStep.value) {
+        stepStatus.value = 'SUBMITTED'
+      }
       emit('updated', res.data)
       loadStepLogs(props.exceptionId)
     }

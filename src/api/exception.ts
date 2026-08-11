@@ -178,11 +178,6 @@ export function getCloseReadinessApi(id: number): Promise<ApiResult<CloseReadine
   return apiGet<CloseReadinessVO>(`${BASE}/${id}/close-readiness`)
 }
 
-/** 重置异常单为最初状态（清空流程/状态，逻辑删除关联数据） */
-export function resetExceptionApi(id: number): Promise<ApiResult<void>> {
-  return apiPost<void>(`${BASE}/${id}/reset`)
-}
-
 // ===== CAPA 相位审批（BOTH 模式专用） =====
 
 /** CAPA 根因审批（BOTH 模式：8D D4 完成后 CAPA 质量部门审批根因分析结果） */
