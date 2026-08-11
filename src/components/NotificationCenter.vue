@@ -40,6 +40,14 @@
                 <span>{{ item.title }}</span>
                 <span class="notification-time">{{ formatTime(item.createdAt) }}</span>
               </div>
+              <div class="notification-item-subtitle" v-if="getSummaryHtml(item)">
+                <span class="subtitle-biz-type">{{ getBizTypeLabel(item.businessType) }}</span>
+                <span class="subtitle-extra" v-if="getSummaryHtml(item)">{{ getSummaryHtml(item) }}</span>
+                <el-tag size="small" v-if="item.level && item.level !== '提醒'"
+                  :type="levelTagType(item.level)" class="subtitle-level-tag">
+                  {{ item.level }}
+                </el-tag>
+              </div>
               <div class="notification-item-content">{{ item.content }}</div>
             </div>
             <el-button
@@ -76,6 +84,7 @@ import {
 } from '@/api/notification'
 import type { Notification } from '@/types/notification'
 import { NOTIFICATION_TYPE_COLORS } from '@/enums/notification'
+import { BIZ_TYPE_ROUTE, BIZ_TYPE_LABEL } from '@/constants/businessTypes'
 import {
   connectNotificationSocket,
   disconnectNotificationSocket,
@@ -147,15 +156,40 @@ async function markAllRead() {
   }
 }
 
-const EXCEPTION_BIZ_TYPES = ['EXCEPTION_ORDER']
+function getBizTypeLabel(type?: string) {
+  return type ? (BIZ_TYPE_LABEL[type] || type) : ''
+}
+
+function getSummaryHtml(n: Notification): string {
+  const parts: string[] = []
+  if (n.extraDataMap) {
+    if (n.extraDataMap.exceptionNo) parts.push(`#${n.extraDataMap.exceptionNo}`)
+    if (n.extraDataMap.supplierName) parts.push(n.extraDataMap.supplierName)
+  }
+  return parts.join(' · ')
+}
+
+function levelTagType(level?: string) {
+  if (level === '严重') return 'danger'
+  if (level === '警告') return 'warning'
+  return 'info'
+}
+
+function getNotificationType(n: Notification): string {
+  if (n.level === '严重') return 'warning'
+  return 'info'
+}
 
 function handleClick(item: Notification) {
   if (item.isRead === 0) markRead(item)
-  if (item.businessId) {
-    if (EXCEPTION_BIZ_TYPES.includes(item.businessType!)) {
+  if (item.businessId && item.businessType) {
+    const route = BIZ_TYPE_ROUTE[item.businessType]
+    if (route === '/exception') {
       router.push(`/exception/${item.businessId}`)
     } else if (item.businessType === 'ESCALATION') {
       router.push(`/exception?escalation=${item.businessId}`)
+    } else if (route) {
+      router.push(`${route}/${item.businessId}`)
     }
   }
   visible.value = false
@@ -182,10 +216,15 @@ function handleRealtimeNotification(payload: Notification) {
     list.value = [payload, ...list.value].slice(0, 8)
     total.value = total.value + 1
   }
+  const bizLabel = getBizTypeLabel(payload.businessType)
+  const summaryHtml = getSummaryHtml(payload)
+  let body = payload.content || ''
+  if (summaryHtml) body = summaryHtml + '\n' + body
+
   ElNotification({
     title: payload.title || '新通知',
-    message: payload.content || '',
-    type: 'info',
+    message: body,
+    type: getNotificationType(payload) as 'info' | 'warning' | 'error',
     duration: 4500,
     customClass: 'qms-realtime-notify',
     // 点击弹窗跳转业务详情
@@ -300,6 +339,30 @@ onUnmounted(() => {
   color: #8c9ba8;
   font-weight: 400;
   white-space: nowrap;
+}
+.notification-item-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+.subtitle-biz-type {
+  color: #2f81f7;
+  background: #f0f5ff;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+.subtitle-extra {
+  color: #8c9ba8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+}
+.subtitle-level-tag {
+  margin-left: auto;
 }
 .notification-item-content {
   font-size: 12px;

@@ -18,6 +18,10 @@ export interface Notification {
   businessId?: number
   isRead: number
   readAt?: string
+  level?: string
+  extraData?: string
+  extraDataMap?: Record<string, any>
+  expireAt?: string
   plantCode?: string
   plantName?: string
   createdBy?: string
@@ -31,6 +35,9 @@ export interface NotificationListParams extends PageParams {
   isRead?: number
   businessType?: string
   businessId?: number
+  level?: string
+  startTime?: string
+  endTime?: string
 }
 
 /** 未读通知数响应 */

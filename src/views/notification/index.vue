@@ -25,10 +25,50 @@
             <el-radio-button label="unread">未读</el-radio-button>
             <el-radio-button label="read">已读</el-radio-button>
           </el-radio-group>
+          <div class="toolbar-filters">
+            <el-select v-model="levelFilter" placeholder="等级" clearable size="small" style="width: 90px"
+              @change="handleFilterChange">
+              <el-option v-for="lv in levelOptions" :key="lv.value" :label="lv.label" :value="lv.value" />
+            </el-select>
+            <el-select v-model="bizTypeFilter" placeholder="类型" clearable size="small" style="width: 110px"
+              @change="handleFilterChange">
+              <el-option v-for="bt in bizTypeOptions" :key="bt.value" :label="bt.label" :value="bt.value" />
+            </el-select>
+            <el-date-picker
+              v-model="dateRange"
+              type="daterange"
+              range-separator="至"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              size="small"
+              style="width: 240px"
+              format="YYYY-MM-DD"
+              value-format="YYYY-MM-DD"
+              @change="handleFilterChange"
+            />
+          </div>
           <span class="list-total">共 {{ total }} 条</span>
         </div>
 
-        <div v-loading="loading" class="message-list">
+        <!-- 加载状态 -->
+        <div v-if="loading && notifications.length === 0" class="message-list">
+          <div class="loading-state">
+            <el-icon class="loading-icon" :size="32"><Loading /></el-icon>
+            <p>加载通知中...</p>
+          </div>
+        </div>
+
+        <!-- 错误状态 -->
+        <div v-else-if="loadError" class="message-list">
+          <el-result icon="error" title="加载失败" sub-title="无法获取通知列表，请检查网络后重试">
+            <template #extra>
+              <el-button type="primary" @click="loadNotifications">重新加载</el-button>
+            </template>
+          </el-result>
+        </div>
+
+        <!-- 正常列表 -->
+        <div v-else class="message-list">
           <button
             v-for="item in notifications"
             :key="item.id"
@@ -46,12 +86,15 @@
               <span class="message-content">{{ item.content }}</span>
               <span class="message-meta">
                 <el-tag size="small" effect="plain" :style="tagStyle(item.type)">{{ typeLabel(item.type) }}</el-tag>
+                <el-tag v-if="item.level && item.level !== '提醒'" size="small" :type="levelTagType(item.level)">
+                  {{ item.level }}
+                </el-tag>
                 <time>{{ formatTime(item.createdAt) }}</time>
               </span>
             </span>
           </button>
 
-          <el-empty v-if="!loading && notifications.length === 0" description="暂无消息" :image-size="76" />
+          <el-empty v-if="!loading && notifications.length === 0 && !loadError" description="暂无消息" :image-size="76" />
         </div>
 
         <div class="pagination-wrap">
@@ -102,7 +145,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowRight, Check, Refresh } from '@element-plus/icons-vue'
+import { ArrowRight, Check, Loading, Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import {
   getNotificationListApi,
@@ -117,11 +160,13 @@ import {
   type NotificationReadFilter,
 } from '@/utils/notification-query'
 import { notificationPaginationLocale } from '@/utils/notification-pagination-locale'
+import { BIZ_TYPE_ROUTE, BIZ_TYPE_OPTIONS, NOTIFICATION_LEVELS } from '@/constants/businessTypes'
 
 const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
+const loadError = ref(false)
 const notifications = ref<Notification[]>([])
 const total = ref(0)
 const unreadTotal = ref(0)
@@ -129,6 +174,12 @@ const page = ref(readPositiveInteger(route.query.page, 1))
 const size = ref(readPositiveInteger(route.query.size, 10))
 const readFilter = ref<NotificationReadFilter>(readFilterFromQuery(route.query.read))
 const selectedId = ref<number | null>(readPositiveInteger(route.query.id, 0) || null)
+const levelFilter = ref<string>('')
+const bizTypeFilter = ref<string>('')
+const dateRange = ref<[string, string] | null>(null)
+
+const levelOptions = NOTIFICATION_LEVELS
+const bizTypeOptions = BIZ_TYPE_OPTIONS
 
 const selectedNotification = computed(
   () => notifications.value.find((item) => item.id === selectedId.value) ?? null,
@@ -145,8 +196,18 @@ function readFilterFromQuery(value: unknown): NotificationReadFilter {
 
 async function loadNotifications() {
   loading.value = true
+  loadError.value = false
   try {
-    const res = await getNotificationListApi(buildNotificationListQuery(page.value, size.value, readFilter.value))
+    const query = buildNotificationListQuery({
+      page: page.value,
+      size: size.value,
+      filter: readFilter.value,
+      level: levelFilter.value || undefined,
+      businessType: bizTypeFilter.value || undefined,
+      startTime: dateRange.value?.[0],
+      endTime: dateRange.value?.[1],
+    })
+    const res = await getNotificationListApi(query)
     if (res.code !== 0) return
 
     notifications.value = res.data.list
@@ -155,6 +216,9 @@ async function loadNotifications() {
     const selected = notifications.value.find((item) => item.id === persistedId)
     selectedId.value = selected?.id ?? notifications.value[0]?.id ?? null
     updateRouteQuery()
+  } catch (e) {
+    console.error('加载通知列表失败', e)
+    loadError.value = true
   } finally {
     loading.value = false
   }
@@ -212,15 +276,22 @@ function updateRouteQuery() {
   router.replace({ query })
 }
 
-const EXCEPTION_BIZ_TYPES = ['EXCEPTION_ORDER']
-
 function goToBusiness(item: Notification) {
-  if (!item.businessId) return
-  if (EXCEPTION_BIZ_TYPES.includes(item.businessType!)) {
+  if (!item.businessId || !item.businessType) return
+  const route = BIZ_TYPE_ROUTE[item.businessType]
+  if (route === '/exception') {
     router.push(`/exception/${item.businessId}`)
   } else if (item.businessType === 'ESCALATION') {
     router.push(`/exception?escalation=${item.businessId}`)
+  } else if (route) {
+    router.push(`${route}/${item.businessId}`)
   }
+}
+
+function levelTagType(level: string) {
+  if (level === '严重') return 'danger'
+  if (level === '警告') return 'warning'
+  return 'info'
 }
 
 function typeColor(type: string) {
@@ -292,8 +363,12 @@ onMounted(async () => {
 }
 
 .message-list-panel { display: flex; min-width: 0; flex-direction: column; border-right: 1px solid #e9eef3; }
-.list-toolbar { display: flex; align-items: center; justify-content: space-between; min-height: 64px; padding: 0 18px; border-bottom: 1px solid #edf1f5; }
-.list-total { color: #8c9ba8; font-size: 12px; }
+.list-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; min-height: 64px; padding: 8px 18px; border-bottom: 1px solid #edf1f5; }
+.toolbar-filters { display: flex; align-items: center; gap: 8px; }
+.list-total { color: #8c9ba8; font-size: 12px; white-space: nowrap; }
+.loading-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 60px 0; color: #8c9ba8; }
+.loading-icon { animation: spin 0.8s linear infinite; color: #2f81f7; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 .message-list { flex: 1; min-height: 0; overflow-y: auto; }
 .message-row { display: flex; width: 100%; gap: 11px; padding: 15px 17px; border: 0; border-bottom: 1px solid #f0f3f6; color: inherit; background: transparent; text-align: left; cursor: pointer; transition: background 0.18s ease, box-shadow 0.18s ease; }
 .message-row:hover { background: #f7faff; }

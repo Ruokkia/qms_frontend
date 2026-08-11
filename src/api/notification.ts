@@ -41,3 +41,11 @@ export function markAllNotificationsReadApi(): Promise<ApiResult<void>> {
 export function createNotificationApi(data: NotificationCreateDTO): Promise<ApiResult<Notification>> {
   return apiPost<Notification>(BASE, data)
 }
+
+/** 校验业务资源是否存在（跳转前检查） */
+export function checkBusinessExistsApi(
+  businessType: string,
+  businessId: number,
+): Promise<ApiResult<boolean>> {
+  return apiGet<boolean>(`${BASE}/check`, { params: { businessType, businessId } })
+}
