@@ -402,8 +402,14 @@ function fillFromItem(info: { itemCode: string; itemName: string; batchNo: strin
   // 冗余兼容列同步
   form.materialCode = info.itemCode
   form.materialName = info.itemName
-  // 若已选工序，联动刷新参数预览
-  if (form.processCode && form.processName) loadStandardPreview()
+  // 代码变化，清空已选工序，避免串数据（与 onItemCodeInput 行为一致）
+  form.processCode = ''
+  form.processName = ''
+  standardItems.value = []
+  processNotInStandard.value = false
+  // 按新代码加载工序列表
+  if (codeTimer) clearTimeout(codeTimer)
+  codeTimer = setTimeout(() => loadProcesses(), 300)
 }
 
 function onBarcodeSelect(item: TraceItemSearchResult) {

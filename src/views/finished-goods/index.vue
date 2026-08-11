@@ -26,7 +26,18 @@
         <el-select v-model="filters.inspectionResult" placeholder="检验结果" clearable style="width: 105px" @change="search">
           <el-option label="合格" value="合格" />
           <el-option label="不合格" value="不合格" />
+          <el-option label="其他" value="__OTHER__" />
+          <el-option label="自定义" value="__CUSTOM__" />
         </el-select>
+        <el-input
+          v-if="filters.inspectionResult === '__CUSTOM__'"
+          v-model="customInspectionKeyword"
+          placeholder="检验结果关键字"
+          clearable
+          style="width: 140px"
+          @keyup.enter="search"
+          @clear="search"
+        />
         <el-select v-model="filters.qcReview" placeholder="品管审核" clearable style="width: 105px" @change="search">
           <el-option label="待审核" value="待审核" />
           <el-option label="已审核" value="已审核" />
@@ -281,6 +292,8 @@ const filters = reactive<FinishedGoodsListParams>({
   page: 1,
   size: 10,
 })
+/** 检验结果「自定义」时的手动输入关键字（模糊搜索） */
+const customInspectionKeyword = ref('')
 const router = useRouter()
 
 async function search() {
@@ -292,6 +305,7 @@ function resetFilters() {
   filters.keyword = ''
   filters.category = ''
   filters.inspectionResult = ''
+  customInspectionKeyword.value = ''
   filters.qcReview = ''
   filters.mgrApproval = ''
   filters.dateField = ''
@@ -348,7 +362,9 @@ async function loadList() {
     const p: FinishedGoodsListParams = {
       keyword: filters.keyword || undefined,
       category: filters.category || undefined,
-      inspectionResult: filters.inspectionResult || undefined,
+      inspectionResult: filters.inspectionResult === '__CUSTOM__' ? undefined : filters.inspectionResult || undefined,
+      inspectionResultLike:
+        filters.inspectionResult === '__CUSTOM__' ? customInspectionKeyword.value.trim() || undefined : undefined,
       qcReview: filters.qcReview || undefined,
       mgrApproval: filters.mgrApproval || undefined,
       dateField: filters.dateField || undefined,

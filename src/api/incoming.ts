@@ -71,8 +71,6 @@ export interface CreateBindingParams {
   specModel?: string
   workOrderNo?: string
   workOrderQty?: number
-  processCode?: string
-  processName?: string
 }
 export function createBindingApi(data: CreateBindingParams): Promise<ApiResult<any>> {
   return apiPost<any>('/material-bindings', data)

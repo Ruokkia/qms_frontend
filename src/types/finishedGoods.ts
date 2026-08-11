@@ -92,6 +92,8 @@ export interface FinishedGoodsListParams extends PageParams {
   keyword?: string
   category?: string
   inspectionResult?: string
+  /** 检验结果自定义关键字（模糊搜索） */
+  inspectionResultLike?: string
   qcReview?: string
   mgrApproval?: string
   dateField?: string
