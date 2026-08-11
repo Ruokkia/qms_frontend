@@ -8,6 +8,12 @@
       <el-button size="small" :loading="recalcLoading" @click="onRecalc">重新计算控制限</el-button>
     </div>
 
+    <div v-if="hasData && xCl == null" class="limit-missing-hint">
+      <el-alert type="warning" :closable="false" show-icon>
+        <template #title>尚未生成控制限基线，请点击「重新计算控制限」按钮生成，以便判定过程稳定性并标注异常点。</template>
+      </el-alert>
+    </div>
+
     <div v-if="hasData" class="stat-grid">
       <div class="stat-cell">
         <span class="stat-label">均值 X̄</span>
@@ -33,15 +39,15 @@
 
     <div ref="chartRef" class="chart-body"></div>
 
-    <!-- 过程能力分析 -->
+    <!-- 过程能力分析（使用专用能力 API 结果，与过程能力 tab 一致） -->
     <CapabilityCard
       v-if="data"
-      :cp="data.cp"
-      :cpk="data.cpk"
-      :pp="data.pp"
-      :ppk="data.ppk"
-      :sigma-within="data.sigmaWithin"
-      :sigma-overall="data.sigmaOverall"
+      :cp="capValues.cp"
+      :cpk="capValues.cpk"
+      :pp="capValues.pp"
+      :ppk="capValues.ppk"
+      :sigma-within="null"
+      :sigma-overall="null"
     />
 
     <!-- 控制限数值表（工厂审核用，含公式） -->
@@ -73,7 +79,7 @@
     <div v-if="anomalies.length" class="anomaly-box">
       <div class="anomaly-head">⚠ 检出 {{ anomalies.length }} 个异常子组（判异规则），点击可定位：</div>
       <ul>
-        <li v-for="a in pagedAnomalies" :key="a.index" class="anomaly-item" @click="emit('subgroup-click', { subgroupIndex: a.index, subgroupNo: a.subgroupNo })">
+        <li v-for="a in pagedAnomalies" :key="a.index" class="anomaly-item" @click="emit('subgroup-click', { subgroupIndex: a.index, subgroupNo: a.subgroupNo, subgroupId: a.subgroupId })">
           <b>#{{ a.index + 1 }} {{ a.subgroupNo }}</b>：{{ a.rules.join('、') }}
         </li>
       </ul>
@@ -111,7 +117,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'subgroup-click', payload: { subgroupIndex: number; subgroupNo: string }): void
+  (e: 'subgroup-click', payload: { subgroupIndex: number; subgroupNo: string; subgroupId?: number }): void
 }>()
 
 function getControlColor(v: number | null, upper: number | null, lower: number | null): string {
@@ -128,6 +134,14 @@ let ro: ResizeObserver | null = null
 const recalcLoading = ref(false)
 
 const data = computed<SpcChartData | null>(() => store.chartDataXbarS)
+
+// 控制图内嵌能力卡片使用专用能力 API 结果（与过程能力 tab 一致）
+const capValues = computed(() => ({
+  cp: store.capabilityResult?.cp ?? null,
+  cpk: store.capabilityResult?.cpk ?? null,
+  pp: store.capabilityResult?.pp ?? null,
+  ppk: store.capabilityResult?.ppk ?? null,
+} as { cp: number | null; cpk: number | null; pp: number | null; ppk: number | null }))
 const hasData = computed(() => (data.value?.points?.length || 0) > 0)
 const param = computed(() => store.parameterList.find((p) => p.id === props.paramId) || null)
 const subgroupSize = computed(() => data.value?.subgroupSize ?? param.value?.subgroupSize ?? 0)
@@ -199,17 +213,18 @@ function render() {
     return
   }
   const fullNos = d.points.map((p) => p.subgroupNo)
+  const fullIds = d.points.map((p) => p.subgroupId)
   const cats = d.points.map((_, i) => `子组 ${i + 1}`)
   const x = d.points.map((p) => n(p.x))
   const s = d.points.map((p) => n(p.s))
-  const xu = n(d.xbarUcl), xc = n(d.xbarCl), xl = n(d.xbarLcl)
+  const xu = lv(d, ['xbarUcl', 'xbarucl', 'XbarUcl']), xc = lv(d, ['xbarCl', 'xbarcl', 'XbarCl']), xl = lv(d, ['xbarLcl', 'xbarlcl', 'XbarLcl'])
   const su = lv(d, ['sUcl', 'sucl', 'SUcl'])
   const sc = lv(d, ['sCl', 'scl', 'SCl'])
   const sl = lv(d, ['sLcl', 'slcl', 'SLcl'])
   xUcl.value = xu; xCl.value = xc; xLcl.value = xl
   sUcl.value = su; sCl.value = sc; sLcl.value = sl
 
-  const xRes = detectControlRules(x, xc, xu, xl, fullNos)
+  const xRes = detectControlRules(x, xc, xu, xl, fullNos, fullIds)
   anomalies.value = xRes.anomalies
   anomalyPage.value = 1
   xOoc.value = xRes.tags.size > 0
@@ -285,21 +300,18 @@ function render() {
   const tip = (params: any) => {
     const i = params[0]?.dataIndex ?? 0
     const pt: any = d.points[i] || {}
-    let s2 = `<b>${fullNos[i] ?? `子组 ${i + 1}`}</b><br/>`
-    if (pt.barcode) s2 += `条码：<b>${pt.barcode}</b><br/>`
+    let s2 = `<b>子组 ${i + 1}</b><br/>`
+    // 悬停只显示：该子组对应的批次号 + 样本数据 + 录入时间（精简低噪）
     if (pt.batchNo) s2 += `批次号：<b>${pt.batchNo}</b><br/>`
-    if (pt.itemCode) s2 += `代码：<b>${pt.itemCode}</b><br/>`
     if (pt.samples && pt.samples.length > 0) {
-      s2 += `样本值：`
+      s2 += `样本数据：`
       pt.samples.forEach((sv: any, si: number) => {
-        s2 += `${sv != null ? Number(sv).toFixed(3) : '—'}`
+        s2 += `${sv != null ? Number(sv.sampleValue).toFixed(3) : '—'}`
         if (si < pt.samples.length - 1) s2 += ', '
       })
       s2 += '<br/>'
     }
-    params.forEach((p: any) => {
-      s2 += `${p.marker}${p.seriesName}：<b>${p.value == null ? '—' : Number(p.value).toFixed(3)}</b><br/>`
-    })
+    if (pt.sampleTime) s2 += `录入时间：<b>${pt.sampleTime}</b>`
     return s2
   }
 
@@ -366,14 +378,18 @@ function render() {
   chart.on('click', (params: any) => {
     const i = params.dataIndex ?? -1
     if (i >= 0 && d.points[i]) {
-      emit('subgroup-click', { subgroupIndex: i, subgroupNo: fullNos[i] })
+      emit('subgroup-click', { subgroupIndex: i, subgroupNo: fullNos[i], subgroupId: d.points[i]?.subgroupId })
     }
   })
 }
 
 async function load() {
   if (!props.paramId) return
-  await store.fetchChartDataXbarS(props.paramId, props.itemType, props.itemCode, props.batchNo)
+  // 图表数据 + 能力指数并行获取
+  await Promise.all([
+    store.fetchChartDataXbarS(props.paramId, props.itemType, props.itemCode, props.batchNo),
+    store.fetchCapability(props.paramId, props.itemType, props.itemCode),
+  ])
   render()
 }
 
@@ -381,7 +397,7 @@ async function onRecalc() {
   if (!props.paramId) return
   recalcLoading.value = true
   try {
-    await store.recalcControlLimits(props.paramId)
+    await store.recalcControlLimits(props.paramId, props.itemType, props.itemCode)
     ElMessage.success('控制限已重算')
     await load()
   } finally {

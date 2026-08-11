@@ -100,6 +100,36 @@ export function searchSpcItemsApi(keyword?: string): Promise<ApiResult<SpcItemDi
   return apiGet<SpcItemDict[]>(`${BASE}/items/search`, { params: { keyword } })
 }
 
+// ===== 来源批号（成品表 / 物料表反查） =====
+
+export interface SpcBatchNo {
+  batchNo?: string
+  itemName?: string
+}
+
+/** 录入时下拉的真实批号列表（按 itemType+itemCode 查成品表/物料表） */
+export function getBatchNosApi(
+  itemType: 'PRODUCT' | 'MATERIAL',
+  itemCode: string,
+): Promise<ApiResult<SpcBatchNo[]>> {
+  return apiGet<SpcBatchNo[]>(`${BASE}/source/batch-nos`, {
+    params: { itemType, itemCode },
+  })
+}
+
+/** 按 itemType+itemCode+(batchNo|条码) 反查成品表/物料表来源明细（SPC 溯源抽屉） */
+export function getSourceDetailApi(
+  itemType: 'PRODUCT' | 'MATERIAL',
+  itemCode: string,
+  batchNo?: string,
+  barcode?: string,
+  plantCode?: string,
+): Promise<ApiResult<Record<string, unknown>>> {
+  return apiGet<Record<string, unknown>>(`${BASE}/source/detail`, {
+    params: { itemType, itemCode, batchNo, barcode, plantCode },
+  })
+}
+
 // ===== 控制图 =====
 
 export function getXbarRChartApi(
@@ -124,8 +154,14 @@ export function getXbarSChartApi(
   })
 }
 
-export function recalcControlLimitsApi(paramId: number): Promise<ApiResult<Record<string, unknown>>> {
-  return apiPost<Record<string, unknown>>(`${BASE}/control-limits/${paramId}/recalc`)
+export function recalcControlLimitsApi(
+  paramId: number,
+  itemType?: 'PRODUCT' | 'MATERIAL',
+  itemCode?: string,
+): Promise<ApiResult<Record<string, unknown>>> {
+  return apiPost<Record<string, unknown>>(`${BASE}/control-limits/${paramId}/recalc`, null, {
+    params: { itemType, itemCode },
+  })
 }
 
 // ===== 过程能力 =====

@@ -173,8 +173,16 @@ export const useSpcStore = defineStore('spc', () => {
     chartBatchNo.value = batchNo
   }
 
-  async function recalcControlLimits(paramId: number) {
-    return spcApi.recalcControlLimitsApi(paramId)
+  async function recalcControlLimits(
+    paramId: number,
+    itemType?: 'PRODUCT' | 'MATERIAL',
+    itemCode?: string,
+  ) {
+    // 重算时与当前控制图所筛选的 item 维度保持一致，避免把其他 item 的无效子组混入。
+    // 优先使用调用方显式传入的维度（子组件 props），缺省回退到 store 当前图表维度。
+    const it = itemType ?? chartItemType.value
+    const ic = itemCode ?? chartItemCode.value
+    return spcApi.recalcControlLimitsApi(paramId, it, ic)
   }
 
   // ===== 过程能力 =====

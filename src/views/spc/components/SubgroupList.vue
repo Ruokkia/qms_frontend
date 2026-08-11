@@ -18,8 +18,8 @@
       </template>
       <el-table 
         ref="tableRef"
-        :data="list" 
-        size="small" 
+        :data="pagedList" 
+        size="small"
         empty-text="暂无子组数据" 
         v-loading="loading" 
         :row-class-name="rowClass" 
@@ -116,6 +116,19 @@
       <div v-if="itemCode && list.length" class="list-foot">
         仅展示该代码子组；其中「待补样本」未满 n，<strong>不进入控制图</strong>（此为正常行为）。
       </div>
+      <div v-if="list.length" class="pager-wrap">
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :total="list.length"
+          :page-sizes="pageSizes"
+          layout="total, sizes, prev, pager, next"
+          size="small"
+          background
+          @current-change="clampPage"
+          @size-change="clampPage"
+        />
+      </div>
     </el-card>
 </template>
 
@@ -128,6 +141,8 @@ import { searchSpcItemsApi } from '@/api/spc'
 const props = defineProps<{ 
   paramId: number | null
   itemCode?: string
+  batchKeyword?: string
+  barcodeKeyword?: string
   /** 从控制图点击联动传入：要定位高亮的子组编号 */
   highlightSubgroupNo?: string | null
 }>()
@@ -136,6 +151,21 @@ const store = useSpcStore()
 const list = ref<any[]>([])
 const loading = ref(false)
 const tableRef = ref<any>(null)
+
+// 前端分页状态（基于全量 list 切片）
+const currentPage = ref(1)
+const pageSize = ref(10)
+const pageSizes = [10, 20, 50]
+/** 当前页切片数据 */
+const pagedList = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return list.value.slice(start, start + pageSize.value)
+})
+/** 钳制当前页码，避免过滤/删除后停留在越界页 */
+function clampPage() {
+  const max = Math.max(1, Math.ceil(list.value.length / pageSize.value))
+  if (currentPage.value > max) currentPage.value = max
+}
 
 // 名称映射缓存
 const nameMap = ref<Map<string, string>>(new Map())
@@ -190,15 +220,20 @@ const oosCount = computed(() => list.value.filter((r) => hasOOS(r)).length)
 
 /** 滚动并高亮指定子组编号对应的行 */
 async function scrollToSubgroup(subgroupNo: string) {
-  await nextTick()
   const idx = list.value.findIndex((r) => r.subgroupNo === subgroupNo)
   if (idx === -1 || !tableRef.value) return
+  // 目标子组不在当前页时，先跳转到其所属页再高亮
+  const targetPage = Math.floor(idx / pageSize.value) + 1
+  if (currentPage.value !== targetPage) {
+    currentPage.value = targetPage
+  }
+  await nextTick()
   tableRef.value.setCurrentRow(list.value[idx])
   // 滚动到该行
   const el = tableRef.value.$el?.querySelector?.('.el-table__body-wrapper')
   if (el) {
     const rows = el.querySelectorAll('.el-table__row')
-    const target = rows[idx]
+    const target = rows[idx % pageSize.value]
     if (target) {
       target.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
@@ -235,13 +270,21 @@ function rowClass({ row }: { row: any }): string {
 async function load() {
   if (!props.paramId) {
     list.value = []
+    currentPage.value = 1
     return
   }
   loading.value = true
   try {
     const all = await store.fetchSubgroups(props.paramId)
     const code = (props.itemCode || '').trim()
-    list.value = code ? all.filter((s) => s.itemCode === code) : all
+    const batch = (props.batchKeyword || '').trim().toLowerCase()
+    const barcode = (props.barcodeKeyword || '').trim().toLowerCase()
+    list.value = all.filter((s) =>
+      (!code || s.itemCode === code) &&
+      (!batch || (s.batchNo || '').toLowerCase().includes(batch)) &&
+      (!barcode || (s.samples || []).some((sample) => (sample.barcode || '').toLowerCase().includes(barcode))),
+    )
+    currentPage.value = 1
 
     const codesToQuery = new Set<string>()
     for (const s of list.value) {
@@ -265,6 +308,7 @@ async function onDelete(row: any) {
   await store.deleteSubgroup(row.id)
   ElMessage.success('子组已删除')
   await load()
+  clampPage()
   emit('deleted')
 }
 
@@ -272,6 +316,8 @@ defineExpose({ load, scrollToSubgroup })
 
 watch(() => props.paramId, load)
 watch(() => props.itemCode, load)
+watch(() => props.batchKeyword, load)
+watch(() => props.barcodeKeyword, load)
 watch(() => props.highlightSubgroupNo, (v) => {
   if (v) scrollToSubgroup(v)
 })
@@ -283,19 +329,15 @@ onMounted(load)
   border: 1px solid #ECE7E1;
   display: flex;
   flex-direction: column;
-  height: 100%;
 }
 .subgroup-list :deep(.el-card__body) {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
   padding: 12px 8px;
 }
 /* 表格撑满卡片纵向空间 */
 .subgroup-list :deep(.el-table) {
-  flex: 1;
+  width: 100%;
 }
 .head { display: flex; align-items: center; justify-content: space-between; }
 .title { font-weight: 600; color: #1B3A5B; }
@@ -305,6 +347,42 @@ onMounted(load)
 .row-pending { background: #F4F1EC; color: #8C9BA8; }
 .row-oos { background: rgba(184, 75, 62, 0.04) !important; }
 .list-foot { font-size: 12px; color: #8C9BA8; margin-top: 8px; line-height: 1.4; }
+
+/* 分页条：固定于卡片底部，融入紧凑风格 */
+.pager-wrap {
+  margin-top: auto;
+  padding-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid #ECE7E1;
+}
+.pager-wrap :deep(.el-pagination) {
+  font-size: 12px;
+}
+.pager-wrap :deep(.el-pagination .el-pagination__total) {
+  color: #8C9BA8;
+}
+.pager-wrap :deep(.el-pagination button),
+.pager-wrap :deep(.el-pagination .el-pager li) {
+  background: #FAF8F6;
+  border-radius: 4px;
+  font-size: 12px;
+  min-width: 24px;
+  height: 24px;
+  line-height: 24px;
+}
+.pager-wrap :deep(.el-pagination .el-pager li.is-active) {
+  background: #1B3A5B;
+  color: #fff;
+  font-weight: 600;
+}
+.pager-wrap :deep(.el-pagination .btn-prev),
+.pager-wrap :deep(.el-pagination .btn-next) {
+  background: #FAF8F6;
+}
+.pager-wrap :deep(.el-pagination .el-select .el-input) {
+  width: 90px;
+}
 
 /* OOS 异常标记点 */
 .oos-dot { color: #B84B3E; font-size: 18px; line-height: 1; cursor: default; }

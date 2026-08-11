@@ -95,6 +95,14 @@ function fmt(v: number | null | undefined): string {
   return v == null ? '—' : Number(v).toFixed(3)
 }
 
+/** 容错读取控制限：兼容后端不同序列化大小写 */
+function lv(obj: any, keys: string[]): number | null {
+  for (const k of keys) {
+    if (obj && obj[k] != null) return Number(obj[k])
+  }
+  return null
+}
+
 function handleResize() {
   chart?.resize()
 }
@@ -111,9 +119,9 @@ function render() {
   const fullNos = d.points.map((p) => p.subgroupNo)
   const cats = d.points.map((_, i) => `子组 ${i + 1}`)
   const x = d.points.map((p) => n(p.x))
-  const xUcl = n(d.xbarUcl)
-  const xCl = n(d.xbarCl)
-  const xLcl = n(d.xbarLcl)
+  const xUcl = lv(d, ['xbarUcl', 'xbarucl', 'XbarUcl'])
+  const xCl = lv(d, ['xbarCl', 'xbarcl', 'XbarCl'])
+  const xLcl = lv(d, ['xbarLcl', 'xbarlcl', 'XbarLcl'])
 
   const res = detectControlRules(x, xCl, xUcl, xLcl, cats)
   anomalies.value = res.anomalies

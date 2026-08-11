@@ -11,6 +11,7 @@
 export interface SpcAnomaly {
   index: number
   subgroupNo: string
+  subgroupId?: number
   rules: string[]
 }
 
@@ -25,6 +26,7 @@ export function detectControlRules(
   ucl: number | null,
   lcl: number | null,
   subgroupNos: string[],
+  subgroupIds?: (number | undefined)[],
 ): SpcRuleResult {
   const tags = new Map<number, string[]>()
   const add = (i: number, r: string) => {
@@ -158,7 +160,7 @@ export function detectControlRules(
 
   const anomalies: SpcAnomaly[] = []
   tags.forEach((ruleList, i) => {
-    anomalies.push({ index: i, subgroupNo: subgroupNos[i] ?? String(i + 1), rules: ruleList })
+    anomalies.push({ index: i, subgroupNo: subgroupNos[i] ?? String(i + 1), subgroupId: subgroupIds?.[i], rules: ruleList })
   })
 
   return { tags, anomalies }

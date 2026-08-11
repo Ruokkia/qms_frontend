@@ -38,6 +38,7 @@
           :preset-process-name="faiPreset.processName"
           :fai-record-id="faiPreset.faiRecordId"
           @saved="onSaved"
+          @context-change="onEntryContextChange"
         />
       </el-tab-pane>
 
@@ -61,6 +62,7 @@
               class="code-input"
               @select="onChartItemSelect"
               @blur="onChartItemBlur"
+              @clear="onChartItemClear"
               @keyup.enter="onChartFilter"
             >
               <template #prefix>
@@ -90,19 +92,19 @@
           <div class="filter-item">
             <span class="lbl">工序</span>
             <el-select
-              v-model="chartProcessId"
+              v-model="chartProcessCode"
               placeholder="请先输入代码"
               :disabled="!chartItemCode"
               clearable
-              class="param-select"
+              class="process-select"
               style="width:180px"
               @change="onChartProcessChange"
             >
               <el-option
-                v-for="p in store.processList"
-                :key="p.id"
+                v-for="p in chartProcessOptions"
+                :key="p.processCode"
                 :label="p.processName"
-                :value="p.id"
+                :value="p.processCode"
               />
             </el-select>
           </div>
@@ -125,15 +127,18 @@
             </el-select>
           </div>
         </div>
-        <div v-if="!chartParamId" class="need-param">
+        <div v-if="!chartReady" class="need-param">
           <el-icon class="np-icon"><DataAnalysis /></el-icon>
-          <div class="np-title">请选择分析参数</div>
-          <div class="np-sub">在上方下拉框选择关键参数后，即可查看对应的 {{ chartTypeOfSelected }} 控制图</div>
-        </div>
-        <div v-else-if="!chartItemCode" class="need-param">
-          <el-icon class="np-icon"><Search /></el-icon>
-          <div class="np-title">请指定{{ chartTypeLabel }}代码</div>
-          <div class="np-sub">不同{{ chartTypeLabel }}的上/下限标准不同，需先指定代码才能确保控制图准确反映该{{ chartTypeLabel }}的规格和过程状态</div>
+          <div class="np-title">
+            <template v-if="!chartItemCode">请先输入代码</template>
+            <template v-else-if="!chartProcessId">请选择工序</template>
+            <template v-else>请选择分析参数</template>
+          </div>
+          <div class="np-sub">
+            <template v-if="!chartItemCode">在上方输入产品/物料代码，并选中后可继续选择工序与参数</template>
+            <template v-else-if="!chartProcessId">该代码已配置标准工序，请选择其中一个工序</template>
+            <template v-else>选择关键参数后，即可查看对应的 {{ chartTypeOfSelected }} 控制图</template>
+          </div>
         </div>
         <template v-else>
           <el-alert
@@ -168,7 +173,7 @@
             <el-card shadow="hover" class="chart-card" v-if="chartTypeOfSelected === 'Xbar-s'">
               <XbarSChart 
                 :param-id="chartParamId" 
-                :item-type="chartItemCode ? chartItemType || undefined : undefined" 
+                :item-type="(chartItemCode && chartItemType) ? chartItemType : undefined" 
                 :item-code="chartItemCode || undefined"
                 :batch-no="chartBatchNo || undefined"
                 @subgroup-click="onSubgroupClick"
@@ -177,7 +182,7 @@
             <el-card shadow="hover" class="chart-card" v-else>
               <XbarRChart
                 :param-id="chartParamId"
-                :item-type="chartItemCode ? chartItemType || undefined : undefined"
+                :item-type="(chartItemCode && chartItemType) ? chartItemType : undefined"
                 :item-code="chartItemCode || undefined"
                 :batch-no="chartBatchNo || undefined"
                 @subgroup-click="onSubgroupClick"
@@ -207,6 +212,7 @@
                 :item-code="chartItemCode || undefined"
                 :highlight-subgroup-no="highlightSubgroupNo"
                 @deleted="onSubgroupDeleted"
+                @row-click="(row: any) => openTrace(row.id, row.subgroupNo)"
               />
             </el-card>
           </div>
@@ -243,7 +249,19 @@
       </el-tab-pane>
 
       <el-tab-pane label="过程能力" name="capability">
-        <div v-if="!chartParamId" class="need-param">请先在控制图页选择分析参数</div>
+        <div v-if="!chartReady" class="need-param">
+          <el-icon class="np-icon"><DataAnalysis /></el-icon>
+          <div class="np-title">
+            <template v-if="!chartItemCode">请先输入代码</template>
+            <template v-else-if="!chartProcessId">请选择工序</template>
+            <template v-else>请选择分析参数</template>
+          </div>
+          <div class="np-sub">
+            <template v-if="!chartItemCode">在上方输入产品/物料代码，并选中后可继续选择工序与参数</template>
+            <template v-else-if="!chartProcessId">该代码已配置标准工序，请选择其中一个工序</template>
+            <template v-else>选择关键参数后，即可查看过程能力分析</template>
+          </div>
+        </div>
         <template v-else>
           <el-row :gutter="16">
             <el-col :span="14">
@@ -255,7 +273,7 @@
               <el-card shadow="never" class="cap-card">
                 <CapabilityTrend
                   :param-id="chartParamId"
-                  :item-type="chartItemCode ? chartItemType || undefined : undefined"
+                  :item-type="(chartItemCode && chartItemType) ? chartItemType : undefined"
                   :item-code="chartItemCode || undefined"
                 />
               </el-card>
@@ -266,8 +284,11 @@
           </el-card>
         </template>
       </el-tab-pane>
-    </el-tabs>
-  </div>
+      </el-tabs>
+
+      <!-- 子组溯源弹窗（风格与来料/成品详情一致） -->
+      <SubgroupTraceDialog v-model="traceVisible" :loading="traceLoading" :data="traceData" />
+      </div>
 </template>
 
 <script setup lang="ts">
@@ -278,8 +299,9 @@ import { Search, DataAnalysis } from '@element-plus/icons-vue'
 import { useSpcStore } from '@/stores/spc'
 import { useAuthStore } from '@/stores/auth'
 import { useItemTypeStore, type ItemType } from '@/stores/itemType'
-import { searchSpcItemsApi } from '@/api/spc'
+import { searchSpcItemsApi, getSubgroupDetailApi, getSourceDetailApi } from '@/api/spc'
 import type { SpcItemDict } from '@/api/spc'
+import { getStandardProcessesApi, getStandardSpcParamsApi } from '@/api/fai'
 import ProcessConfig from './components/ProcessConfig.vue'
 import DataEntry from './components/DataEntry.vue'
 import XbarRChart from './components/XbarRChart.vue'
@@ -288,6 +310,7 @@ import CapabilityPanel from './components/CapabilityPanel.vue'
 import CapabilityTrend from './components/CapabilityTrend.vue'
 import CapabilityHistogram from './components/CapabilityHistogram.vue'
 import SubgroupList from './components/SubgroupList.vue'
+import SubgroupTraceDialog from './components/SubgroupTraceDialog.vue'
 
 const store = useSpcStore()
 const auth = useAuthStore()
@@ -298,6 +321,12 @@ const activeTab = ref<string>(route.query.tab === 'entry' || route.query.tab ===
 const chartParamId = ref<number | null>(null)
 // 工序下拉（控制图独立筛选）
 const chartProcessId = ref<number | null>(null)
+// 工序下拉选中值（FAI 标准工序编码）
+const chartProcessCode = ref<string | null>(null)
+// 工序下拉选项：来自该代码在 FAI 标准库配置过的工序（processCode/processName）
+const chartProcessOptions = ref<{ processCode: string; processName: string }[]>([])
+/** FAI 检验标准中 spcEnabled=是 的参数ID列表，控制图参数下拉仅展示这些 */
+const chartFaiParamIds = ref<number[]>([])
 // 控制图关联的产品/物料维度：与数据采集、FAI 共用同一份持久化分类，避免同页两处状态割裂
 const itemTypeStore = useItemTypeStore()
 const { itemType: chartItemType } = storeToRefs(itemTypeStore)
@@ -316,9 +345,26 @@ function onChartItemTypeChange(val: string | number | boolean | undefined) {
   // 分类切换后清空代码筛选，避免跨分类串数据
   chartItemCode.value = ''
   chartProcessId.value = null
+  chartProcessCode.value = null
+  chartProcessOptions.value = []
   chartParamId.value = null
   lastChartCandidates = []
   onChartFilter()
+}
+
+// 按当前录入的代码，从 FAI 标准库拉取该代码已配置过的工序，填充工序下拉
+async function loadChartProcesses() {
+  const code = (chartItemCode.value || '').trim()
+  if (!code) {
+    chartProcessOptions.value = []
+    return
+  }
+  try {
+    const res = await getStandardProcessesApi(chartItemType.value, code)
+    chartProcessOptions.value = res.data || []
+  } catch {
+    chartProcessOptions.value = []
+  }
 }
 
 // 控制图代码框模糊搜索候选（统一代码字典：已签首件 ∪ 已激活标准，不再查 trace 表）
@@ -345,55 +391,165 @@ function chartQuerySearchAsync(queryString: string, cb: (results: SpcItemDict[])
 }
 
 function onChartItemSelect(item: SpcItemDict) {
-  chartItemCode.value = item.itemCode || ''
+  const nextItemCode = item.itemCode || ''
+  const isSameItemCode = chartItemCode.value === nextItemCode
+  chartItemCode.value = nextItemCode
+  if (isSameItemCode) {
+    return
+  }
+  // 代码确定后，按代码从 FAI 标准库拉取该代码已配置工序
+  chartProcessId.value = null
+  chartProcessCode.value = null
+  chartParamId.value = null
+  chartFaiParamIds.value = []
+  loadChartProcesses()
+  onChartFilter()
+}
+
+// autocomplete 清空按钮：重置代码/工序/参数，避免串数据
+function onChartItemClear() {
+  chartItemCode.value = ''
+  chartProcessOptions.value = []
+  chartProcessId.value = null
+  chartProcessCode.value = null
+  chartParamId.value = null
+  chartFaiParamIds.value = []
+  lastChartCandidates = []
   onChartFilter()
 }
 
 // 手填/粘贴完整代码并失焦时，优先命中最近模糊候选，避免大小写/前后空格差异
 function onChartItemBlur() {
   const code = (chartItemCode.value || '').trim()
-  if (!code) return
-  const hit = lastChartCandidates.find((c) => c.itemCode === code)
-  if (hit) {
-    chartItemCode.value = hit.itemCode || ''
+  if (!code) {
+    // 清空代码时重置工序/参数，避免串数据
+    chartProcessOptions.value = []
+    chartProcessId.value = null
+    chartProcessCode.value = null
+    chartParamId.value = null
+    chartFaiParamIds.value = []
     onChartFilter()
+    return
   }
+  const hit = lastChartCandidates.find((c) => c.itemCode === code)
+  const nextItemCode = hit?.itemCode || code
+  if (chartItemCode.value === nextItemCode) {
+    return
+  }
+  chartItemCode.value = nextItemCode
+  chartProcessId.value = null
+  chartProcessCode.value = null
+  chartParamId.value = null
+  chartFaiParamIds.value = []
+  loadChartProcesses()
+  onChartFilter()
 }
 
 const plantName = computed(() => auth.plantCode === 'MZ' ? '梅州' : '深圳')
 
-// 控制图参数下拉：按所选工序过滤
-const filteredChartParams = computed(() =>
-  chartProcessId.value
-    ? store.parameterList.filter((p) => p.processId === chartProcessId.value)
-    : [],
-)
+// 控制图参数下拉：按所选工序过滤，且仅保留 FAI 检验标准中 spcEnabled=是 的参数
+const filteredChartParams = computed(() => {
+  if (!chartProcessId.value) return []
+  let list = store.parameterList.filter((p) => p.processId === chartProcessId.value)
+  if (chartFaiParamIds.value.length > 0) {
+    list = list.filter((p) => chartFaiParamIds.value.includes(p.id))
+  }
+  return list
+})
 
 const chartCurrentParam = computed(() =>
   store.parameterList.find((p) => p.id === chartParamId.value) || null,
 )
 const chartTypeOfSelected = computed(() => chartCurrentParam.value?.chartType || 'Xbar-R')
+// 三选齐守卫：代码 + 工序 + 参数 三者齐全才允许渲染控制图（对应 ask「未指定代码不合理」）
+const chartReady = computed(
+  () => !!chartItemCode.value && !!chartProcessId.value && !!chartParamId.value,
+)
 const xbarSParams = computed(() =>
   store.parameterList.filter((p) => p.chartType === 'Xbar-s'),
 )
 
 function onChartFilter() {
+  // 三选齐守卫：代码/工序/参数任一缺失时，不发起查询并清空图表数据，避免「未指定代码全量基线」误绘
+  if (!chartReady.value) {
+    store.setChartItem(chartItemType.value, undefined, undefined)
+    store.chartDataXbarR = null
+    store.chartDataXbarS = null
+    highlightSubgroupNo.value = null
+    return
+  }
   // 同步产品/物料上下文到 spcStore（CapabilityPanel 等子组件通过 store 读取）
   store.setChartItem(chartItemType.value, chartItemCode.value || undefined, chartBatchNo.value || undefined)
   // 清除上次高亮
   highlightSubgroupNo.value = null
 }
 
-// 工序切换时清空参数，用户需重新选择
-function onChartProcessChange() {
+// 按当前代码和 FAI 标准工序加载 SPC 启用参数；手工选择和数据采集自动带入共用。
+async function loadChartFaiParams(processCode: string | null) {
+  const process = processCode
+    ? store.processList.find((item) => item.processCode === processCode)
+    : undefined
+  if (!process || !chartItemCode.value) {
+    chartFaiParamIds.value = []
+    return
+  }
+  await store.fetchParameters(Number(process.id))
+  try {
+    const res = await getStandardSpcParamsApi(chartItemType.value, chartItemCode.value, process.processName)
+    chartFaiParamIds.value = ((res as any)?.data ?? []).map((p: any) => p.spcParameterId).filter(Boolean)
+  } catch {
+    chartFaiParamIds.value = []
+  }
+}
+
+// 工序切换时，将选中的 FAI 标准工序编码(processCode) 反查为 SPC 数字工序 id，
+// 并仅展示 FAI 检验标准中启用 SPC 的参数。
+async function onChartProcessChange() {
+  const code = chartProcessCode.value
+  const process = code ? store.processList.find((item) => item.processCode === code) : undefined
+  chartProcessId.value = process ? Number(process.id) : null
   chartParamId.value = null
+  await loadChartFaiParams(code)
   onChartFilter()
 }
 
-/** 控制图点击数据点/异常项 → 子组表定位 */
-function onSubgroupClick({ subgroupNo }: { subgroupIndex: number; subgroupNo: string }) {
-  // 设置高亮子组编号，SubgroupList 内的 watch 会自动滚动定位
-  highlightSubgroupNo.value = subgroupNo
+/** 控制图点击数据点/异常项 → 打开子组溯源弹窗 */
+function onSubgroupClick({ subgroupId, subgroupNo }: { subgroupIndex: number; subgroupNo: string; subgroupId?: number }) {
+  openTrace(subgroupId, subgroupNo)
+}
+
+// 子组溯源弹窗（风格与来料/成品详情一致）
+const traceVisible = ref(false)
+const traceLoading = ref(false)
+const traceData = ref<Record<string, any> | null>(null)
+async function openTrace(subgroupId?: number, subgroupNo?: string) {
+  if (!subgroupId) return
+  traceVisible.value = true
+  traceLoading.value = true
+  traceData.value = null
+  try {
+    // apiGet 拦截器返回的是整个 ApiResult（{code,message,data,...}），需解包到内层 data
+    const baseRes: Record<string, any> = await getSubgroupDetailApi(subgroupId)
+    const base: Record<string, any> = baseRes?.data ?? baseRes
+    if (!base || !base.itemType) {
+      traceData.value = base ?? null
+      return
+    }
+    // 用「代码 + 批次号/条码」去成品表/物料表反查来源明细，注入弹窗
+    if (base.itemType && base.itemCode && (base.batchNo || base.barcode)) {
+      try {
+        const srcRes = await getSourceDetailApi(base.itemType, base.itemCode, base.batchNo, base.barcode, base.plantCode)
+        base.sourceDetail = srcRes?.data ?? srcRes ?? null
+      } catch {
+        base.sourceDetail = null
+      }
+    } else {
+      base.sourceDetail = null
+    }
+    traceData.value = base
+  } finally {
+    traceLoading.value = false
+  }
 }
 
 /** 当前图表数据的可用批次（用于批次下拉选择器） */
@@ -425,6 +581,31 @@ const sameProcessOtherParams = computed(() => {
 
 function onSaved() {
   // 数据采集变更后，控制图 / 能力面板会在切换 tab 时按 paramId 重新拉取
+}
+
+async function onEntryContextChange(context: { itemCode: string; processCode: string | null; paramId: number | null }) {
+  const isSameItemCode = chartItemCode.value === context.itemCode
+  chartItemCode.value = context.itemCode
+  chartBatchNo.value = ''
+  if (context.processCode) {
+    chartProcessCode.value = context.processCode
+    const process = store.processList.find((item) => item.processCode === context.processCode)
+    chartProcessId.value = process ? Number(process.id) : null
+  } else if (!isSameItemCode) {
+    chartProcessCode.value = null
+    chartProcessId.value = null
+  }
+  await loadChartFaiParams(chartProcessCode.value)
+  if (chartItemCode.value !== context.itemCode || chartProcessCode.value !== context.processCode) {
+    return
+  }
+  if (context.paramId != null) {
+    chartParamId.value = context.paramId
+  } else if (!isSameItemCode) {
+    chartParamId.value = null
+  }
+  loadChartProcesses()
+  onChartFilter()
 }
 
 // 重新加载工序与参数（供错误卡片“重新加载”按钮使用）

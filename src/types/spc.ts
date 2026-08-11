@@ -37,6 +37,8 @@ export interface SpcParameter {
   plantCode: string
   plantName: string
   version?: number
+  /** 该参数下已录入的子组数量（批量查询时返回，用于删除守卫：>0 则不可删） */
+  subgroupCount?: number
 }
 
 /** 采样明细 */
@@ -81,6 +83,8 @@ export interface SpcSubgroup {
 /** 控制图单点 */
 export interface SpcChartPoint {
   subgroupNo: string
+  /** 子组主键 id（点击数据点溯源用） */
+  subgroupId?: number
   /** 分类：PRODUCT(产品) / MATERIAL(物料) */
   itemType?: 'PRODUCT' | 'MATERIAL'
   /** 产品/物料代码（随 itemType 取值，控制图关联维度） */

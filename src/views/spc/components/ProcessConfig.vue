@@ -29,7 +29,16 @@
             <el-table-column label="操作" width="110" fixed="right">
               <template #default="{ row }">
                 <el-button link type="primary" size="small" @click.stop="openProcessDialog(row)">编辑</el-button>
-                <el-popconfirm title="确认删除该工序？" @confirm="onDeleteProcess(row)">
+                <el-tooltip
+                  v-if="processSubgroupCounts[row.id]"
+                  content="该工序下存在子组数据，无法删除"
+                  placement="top"
+                >
+                  <span class="btn-disabled-wrapper">
+                    <el-button link type="danger" size="small" disabled>删除</el-button>
+                  </span>
+                </el-tooltip>
+                <el-popconfirm v-else title="确认删除该工序？" @confirm="onDeleteProcess(row)">
                   <template #reference>
                     <el-button link type="danger" size="small" @click.stop>删除</el-button>
                   </template>
@@ -75,7 +84,16 @@
             <el-table-column label="操作" width="110" fixed="right">
               <template #default="{ row }">
                 <el-button link type="primary" size="small" @click.stop="openParamDialog(row)">编辑</el-button>
-                <el-popconfirm title="确认删除该参数？" @confirm="onDeleteParam(row)">
+                <el-tooltip
+                  v-if="(row as SpcParameter).subgroupCount"
+                  content="该参数下存在子组数据，无法删除"
+                  placement="top"
+                >
+                  <span class="btn-disabled-wrapper">
+                    <el-button link type="danger" size="small" disabled>删除</el-button>
+                  </span>
+                </el-tooltip>
+                <el-popconfirm v-else title="确认删除该参数？" @confirm="onDeleteParam(row)">
                   <template #reference>
                     <el-button link type="danger" size="small" @click.stop>删除</el-button>
                   </template>
@@ -207,6 +225,16 @@ const selectedProcess = computed(() =>
 const paramsOfProcess = computed(() =>
   store.parameterList.filter((p) => p.processId === selectedProcessId.value),
 )
+/** 每个工序的子组总数（key=processId, value=子组数之和），用于删除守卫 */
+const processSubgroupCounts = computed<Record<number, number>>(() => {
+  const map: Record<number, number> = {}
+  for (const p of store.parameterList) {
+    if (p.subgroupCount) {
+      map[p.processId] = (map[p.processId] || 0) + p.subgroupCount
+    }
+  }
+  return map
+})
 const processVisible = ref(false)
 const paramVisible = ref(false)
 const saving = ref(false)
@@ -363,4 +391,6 @@ onMounted(async () => {
 .card-title { font-weight: 600; color: #1B3A5B; }
 .sub-title { font-weight: 400; color: #8C9BA8; font-size: 12px; }
 .num { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #5B7A99; font-variant-numeric: tabular-nums; }
+/* 使 tooltip 能作用在 disabled 按钮上（disabled 元素不触发鼠标事件，需包裹 span） */
+.btn-disabled-wrapper { display: inline-block; cursor: not-allowed; }
 </style>

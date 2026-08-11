@@ -1,5 +1,5 @@
 <template>
-  <div class="data-entry" :style="{ maxHeight: containerMaxHeight }">
+  <div class="data-entry">
     <!-- 上方：数据采集卡（操作区，紧凑自适应，超出时内部滚动） -->
     <el-card shadow="never" class="entry-card entry-top">
       <template #header>
@@ -7,6 +7,7 @@
           <span class="card-title">数据采集</span>
           <div class="head-actions">
             <el-tag type="success" size="small">首件签名后自动同步</el-tag>
+            <el-button type="primary" size="small" :disabled="!currentParam" @click="openEntryDialog">录入样本</el-button>
             <el-button link type="primary" size="small" @click="guideVisible = true">使用说明</el-button>
           </div>
         </div>
@@ -14,14 +15,14 @@
 
       <!-- 筛选区：横向 1 行紧凑布局 -->
       <div class="entry-filterbar">
-        <div class="filter-item">
+        <div class="filter-item filter-type">
           <span class="lbl">分类</span>
           <el-radio-group :model-value="itemType" @update:model-value="onItemTypeChange" size="small">
             <el-radio-button value="PRODUCT">产品</el-radio-button>
             <el-radio-button value="MATERIAL">物料</el-radio-button>
           </el-radio-group>
         </div>
-        <div class="filter-item flex-1">
+        <div class="filter-item flex-1 top-query-code">
           <span class="lbl">{{ typeLabel }}代码</span>
           <el-autocomplete
             v-model="itemCode"
@@ -42,37 +43,55 @@
             </template>
           </el-autocomplete>
         </div>
-        <div class="filter-item">
+        <div class="sub-query-pair">
+        <div class="filter-item sub-query-batch">
           <span class="lbl">批次号</span>
-          <el-input
-            v-model="batchNo"
-            placeholder="必填"
+          <el-autocomplete
+            v-model="subgroupBatchKeyword"
+            :fetch-suggestions="querySubgroupBatchSuggestions"
+            :trigger-on-focus="false"
+            :disabled="!itemCode"
+            placeholder="输入批次号后选择子组"
             clearable
-            style="width:140px"
-          />
+            value-key="batchNo"
+            style="width:160px"
+            @input="clearSubgroupFilters"
+            @select="onSubgroupSourceSelect"
+          >
+            <template #default="{ item }">
+              <div v-if="item.noResult" class="subgroup-query-empty">未查询到符合条件的批次号/条码</div>
+              <div v-else class="barcode-option">
+                <span class="barcode-option__code">{{ item.batchNo }}</span>
+                <span class="barcode-option__meta">{{ item.itemName }}</span>
+              </div>
+            </template>
+          </el-autocomplete>
         </div>
-        <div class="filter-item flex-1">
+        <div class="filter-item flex-1 sub-query-barcode">
           <span class="lbl">条码</span>
           <el-autocomplete
-            v-model="barcode"
-            :fetch-suggestions="queryBarcodeSuggestions"
+            v-model="subgroupBarcodeKeyword"
+            :fetch-suggestions="querySubgroupBarcodeSuggestions"
             :trigger-on-focus="false"
-            placeholder="必填，输入条码可模糊搜索"
+            placeholder="输入条码后选择子组"
             clearable
             value-key="barcode"
             style="flex:1; min-width:160px"
-            @select="onBarcodeSelect"
-            @blur="onBarcodeBlur"
+            @input="clearSubgroupFilters"
+            @select="onSubgroupSourceSelect"
           >
             <template #default="{ item }">
-              <div class="barcode-option">
+              <div v-if="item.noResult" class="subgroup-query-empty">未查询到符合条件的批次号/条码</div>
+              <div v-else class="barcode-option">
                 <span class="barcode-option__code">{{ item.barcode }}</span>
                 <span class="barcode-option__meta">{{ item.itemCode }} · {{ item.itemName }}</span>
               </div>
             </template>
           </el-autocomplete>
         </div>
-        <div class="filter-item">
+        </div>
+        <div class="top-query-pair top-query-process-param">
+        <div class="filter-item top-query-process">
           <span class="lbl">工序</span>
           <el-select
             v-model="selectedProcessName"
@@ -88,7 +107,7 @@
             />
           </el-select>
         </div>
-        <div class="filter-item">
+        <div class="filter-item top-query-param">
           <span class="lbl">参数</span>
           <el-select
             v-model="selectedParamId"
@@ -104,6 +123,7 @@
               :value="p.spcParameterId"
             />
           </el-select>
+        </div>
         </div>
         <el-button
           v-if="itemCode || selectedProcessName || selectedParamId"
@@ -157,14 +177,15 @@
               <el-descriptions-item label="工序">{{ selectedPending.processCode || '—' }}</el-descriptions-item>
             </el-descriptions>
             <div class="samples-title">补录剩余 {{ remainingCount }} 个样本值</div>
-            <div class="sample-grid"><div v-for="i in remainingCount" :key="i" class="sample-cell"><span class="sample-idx">{{ selectedPending.sampleCount + i }}</span><el-input-number v-model="pendingValues[i - 1]" :controls="false" :precision="3" style="width: 100%" /></div></div>
+            <div class="sample-grid"><div v-for="i in remainingCount" :key="i" class="sample-cell"><span class="sample-idx">{{ selectedPending.sampleCount + i }}</span><el-input v-model="pendingValues[i - 1]" :placeholder="specPlaceholder" size="small" class="sample-val-input" inputmode="decimal" style="width: 100%" @keydown.enter="i === remainingCount ? onAppendPending() : undefined" /></div></div>
             <div class="actions"><el-button type="primary" :loading="submitting" @click="onAppendPending">补录并完成子组</el-button></div>
           </template>
         </template>
 
         <template v-else>
         <!-- 正常录入提示：样本已移至底部固定栏 -->
-        <div class="samples-title">样本实测值（需录入 {{ currentParam.subgroupSize }} 个），请在底部 Dock 栏输入</div>
+        <div class="samples-title">样本实测值（需录入 {{ currentParam.subgroupSize }} 个）</div>
+        <div class="entry-start-hint">点击上方“录入样本”开始录入、校验并提交本组样本</div>
         </template>
       </template>
 
@@ -173,34 +194,67 @@
     </el-card>
 
     <!-- 下方：子组历史卡（参考区，填满剩余全部空间） -->
-    <SubgroupList class="entry-bottom" :param-id="selectedParamId" :item-code="itemCode" @deleted="emit('saved')" />
+    <SubgroupList class="entry-bottom" :param-id="selectedParamId" :item-code="itemCode" :batch-keyword="subgroupBatchFilter" :barcode-keyword="subgroupBarcodeFilter" @deleted="emit('saved')" />
 
-    <!-- 底部固定 Dock：样本录入 + 提交，脱离文档流不占用纵向空间 -->
-    <Transition name="dock-slide">
-    <div v-if="currentParam && !pendingSubgroups.length" class="entry-dock">
-      <div class="dock-samples">
-        <span class="dock-label">样本值</span>
-        <div class="dock-grid">
-          <div v-for="i in currentParam.subgroupSize" :key="i" class="dock-cell">
+    <el-dialog
+      v-model="entryDialogVisible"
+      width="920px"
+      append-to-body
+      :close-on-click-modal="false"
+      class="spc-entry-dialog"
+    >
+      <template v-if="currentParam">
+        <div class="entry-dialog-context">
+          <el-tag effect="plain" type="success">{{ typeLabel }} · {{ itemCode || '未选择' }}</el-tag>
+          <el-tag effect="plain" type="info">工序 · {{ selectedProcessName || '未选择' }}</el-tag>
+          <el-tag effect="plain" type="info">参数 · {{ currentParam.paramName }}</el-tag>
+          <el-tag effect="plain" type="success">规格 {{ specPlaceholder }}</el-tag>
+        </div>
+        <div class="entry-dialog-source-row">
+          <label class="entry-dialog-source-batch">
+            <span>批次号</span>
+            <el-autocomplete v-model="batchNo" :fetch-suggestions="queryBarcodeSuggestions" :disabled="!itemCode" :trigger-on-focus="false" value-key="batchNo" placeholder="输入批次号查询" clearable @input="clearSelectedSource" @select="onSourceSelect">
+              <template #default="{ item }"><div class="source-option"><strong>{{ item.batchNo }}</strong><span>条码 {{ item.barcode }}</span></div></template>
+            </el-autocomplete>
+          </label>
+          <label class="entry-dialog-source-barcode">
+            <span>条码</span>
+            <el-autocomplete v-model="barcode" :fetch-suggestions="queryBarcodeSuggestions" :disabled="!itemCode" :trigger-on-focus="false" value-key="barcode" placeholder="输入条码查询" clearable @input="clearSelectedSource" @select="onSourceSelect">
+              <template #default="{ item }"><div class="source-option"><strong>{{ item.barcode }}</strong><span>批次 {{ item.batchNo }}</span></div></template>
+            </el-autocomplete>
+          </label>
+        </div>
+        <div class="entry-dialog-title">本组样本值 <span>共 {{ currentParam.subgroupSize }} 个，支持批量粘贴；仅按 Enter 时跳到下一项</span></div>
+        <div class="entry-dialog-grid">
+          <div v-for="i in currentParam.subgroupSize" :key="i" class="entry-dialog-cell">
             <span class="sample-idx">{{ i }}</span>
-            <el-input-number
+            <el-input
+              :ref="(el: any) => sampleInputRefs[i - 1] = el"
               v-model="sampleValues[i - 1]"
-              :controls="false"
-              :precision="3"
-              size="small"
-              style="width:96px"
-              @paste="i === 1 && onPasteSamples($event)"
+              :placeholder="specPlaceholder"
+              :class="['sample-val-input', sampleValClass(i - 1)]"
+              inputmode="decimal"
+              @keydown.enter="onSampleEnter(i)"
+              @paste="onSamplePaste($event, i)"
             />
           </div>
         </div>
-      </div>
-      <div class="dock-actions">
-        <el-button v-if="lastSubmittedValues.length" size="small" link type="primary" @click="reuseLastSamples">上组复用</el-button>
-        <el-button size="small" @click="resetSamples">清空</el-button>
-        <el-button size="small" type="primary" :loading="submitting" @click="onSubmit">提交子组</el-button>
-      </div>
-    </div>
-    </Transition>
+        <el-alert title="填写完成后提交。超出规格的数值会即时以红色提示，但仍保留给你确认。" type="warning" :closable="false" show-icon class="entry-dialog-alert" />
+      </template>
+      <template #header>
+        <div class="entry-dialog-header">
+          <div class="entry-dialog-heading">录入 SPC 样本数据</div>
+          <div class="entry-dialog-subheading">保存后自动生成子组，并重算控制限与过程能力</div>
+        </div>
+      </template>
+      <template #footer>
+        <span class="entry-dialog-shortcut">Enter 跳到下一项 · 最后一项 Enter 提交</span>
+        <el-button v-if="lastSubmittedValues.length" link type="primary" @click="reuseLastSamples">上组复用</el-button>
+        <el-button @click="resetSamples">清空</el-button>
+        <el-button @click="entryDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submitting" @click="onSubmit">提交子组</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="guideVisible" title="首件与 SPC 待补样本使用说明" width="680px" append-to-body>
       <el-alert title="首件实测值会自动作为 SPC 子组的第 1 个样本；无需在首件中重复录入 n 个样本。" type="success" :closable="false" show-icon style="margin-bottom: 16px" />
@@ -261,9 +315,19 @@ import type { SpcItemDict } from '@/api/spc'
 import { searchItemsByBarcodeApi, type TraceItemSearchResult } from '@/api/trace'
 import { getStandardProcessesApi, getStandardSpcParamsApi, type FaiStandardSpcParamVO } from '@/api/fai'
 import SubgroupList from './SubgroupList.vue'
+import {
+  buildSubgroupSourceOptions,
+  canOpenSampleEntry,
+  filterSubgroupSourceRecords,
+  getSampleEntryAction,
+  isSelectedSourcePair,
+  selectSpcSourceRecord,
+  type SpcSourceRecord,
+} from './spc-entry-dialog'
 
 const emit = defineEmits<{
   (e: 'saved'): void
+  (e: 'context-change', context: { itemCode: string; processCode: string | null; paramId: number | null }): void
 }>()
 
 // FAI「去采集」跳转携带的预填值：优先从 route.query 直接读取（避免 el-tab-pane 懒渲染时 props 透传丢失）
@@ -292,8 +356,8 @@ function getFaiRecordId(): string | undefined {
 const store = useSpcStore()
 const submitting = ref(false)
 const guideVisible = ref(false)
+const entryDialogVisible = ref(false)
 const paramExpanded = ref(false)
-const containerMaxHeight = ref('calc(100vh - 150px)')
 /** 工序键值：从 FAI 标准按 processName 匹配（FAI 标准工序无数字 ID） */
 const selectedProcessName = ref<string | null>(null)
 /** 参数键值：spcParameterId（兼容后端 saveSubgroup 的 paramId） */
@@ -303,6 +367,8 @@ const pendingSubgroups = ref<SpcSubgroup[]>([])
 const selectedPendingId = ref<number | null>(null)
 const pendingValues = ref<number[]>([])
 const lastSubmittedValues = ref<number[]>([])
+/** 样本值输入框 ref 数组（Enter 键自动跳转下一个） */
+const sampleInputRefs = ref<any[]>([])
 /** FAI 标准层工序列表（按 itemCode 加载） */
 const faiProcesses = ref<{ processCode: string; processName: string }[]>([])
 /** FAI 标准层 SPC 参数列表（按 itemCode + processName 加载，含 USL/LSL/目标值/n/图表类型） */
@@ -317,6 +383,12 @@ const { itemType } = storeToRefs(itemTypeStore)
 const itemCode = ref<string>('')
 const batchNo = ref<string>('')
 const barcode = ref<string>('')
+const subgroupBatchKeyword = ref<string>('')
+const subgroupBarcodeKeyword = ref<string>('')
+const subgroupBatchFilter = ref<string>('')
+const subgroupBarcodeFilter = ref<string>('')
+const selectedSubgroupSourceKey = ref<string>('')
+const selectedSource = ref<SpcSourceRecord | null>(null)
 const materialName = ref<string>('')
 // 当前分类中文名，驱动界面文案，避免产品来源数据被标注为「物料」
 const typeLabel = computed(() => (itemType.value === 'PRODUCT' ? '产品' : '物料'))
@@ -373,11 +445,21 @@ function onItemSelect(item: SpcItemDict) {
   itemCode.value = item.itemCode || ''
   materialName.value = item.itemName || ''
   if (item.itemCode) dictMap.set(item.itemCode, item)
+  // 切换代码后清空批次号（批号依赖代码反查）
+  batchNo.value = ''
+  barcode.value = ''
+  subgroupBatchKeyword.value = ''
+  subgroupBarcodeKeyword.value = ''
+  subgroupBatchFilter.value = ''
+  subgroupBarcodeFilter.value = ''
+  selectedSubgroupSourceKey.value = ''
+  selectedSource.value = null
   // 切换代码后清空已选工序/参数并重新加载 FAI 标准工序
   selectedProcessName.value = null
   selectedParamId.value = null
   faiSpcParams.value = []
   loadFaiProcesses()
+  emitAnalysisContext()
 }
 
 // 兼容：手填/粘贴完整代码并失焦时，优先命中最近模糊候选
@@ -392,20 +474,83 @@ function onItemBlur() {
   }
   // 手动输入代码后加载 FAI 标准工序
   loadFaiProcesses()
+  emitAnalysisContext()
 }
 
-// 条码模糊搜索
+function emitAnalysisContext() {
+  const processCode = faiProcesses.value.find((process) => process.processName === selectedProcessName.value)?.processCode || null
+  emit('context-change', { itemCode: itemCode.value.trim(), processCode, paramId: selectedParamId.value })
+}
+
+type SubgroupSourceOption = { itemCode: string; batchNo: string; barcode: string; noResult?: boolean }
+
+async function loadSubgroupSourceOptions(): Promise<SubgroupSourceOption[]> {
+  if (!selectedParamId.value || !itemCode.value.trim()) return []
+  const cachedSubgroups = store.subgroupList.filter((sub) => sub.paramId === selectedParamId.value)
+  const subgroups = cachedSubgroups.length ? cachedSubgroups : await store.fetchSubgroups(selectedParamId.value)
+  return buildSubgroupSourceOptions(subgroups)
+}
+
+let subgroupSuggestionSerial = 0
+function querySubgroupSuggestions(
+  query: string,
+  batchKeyword: string,
+  barcodeKeyword: string,
+  cb: (results: SubgroupSourceOption[]) => void,
+) {
+  if (!(query || '').trim()) {
+    cb([])
+    return
+  }
+  const serial = ++subgroupSuggestionSerial
+  loadSubgroupSourceOptions()
+    .then((options) => {
+      if (serial !== subgroupSuggestionSerial) return
+      const matches = filterSubgroupSourceRecords(options, itemCode.value, batchKeyword, barcodeKeyword)
+      cb(matches.length ? matches : [{ itemCode: itemCode.value, batchNo: batchKeyword, barcode: barcodeKeyword, noResult: true }])
+    })
+    .catch(() => {
+      if (serial === subgroupSuggestionSerial) {
+        cb([{ itemCode: itemCode.value, batchNo: batchKeyword, barcode: barcodeKeyword, noResult: true }])
+      }
+    })
+}
+
+function querySubgroupBatchSuggestions(query: string, cb: (results: SubgroupSourceOption[]) => void) {
+  querySubgroupSuggestions(query, query, subgroupBarcodeKeyword.value, cb)
+}
+
+function querySubgroupBarcodeSuggestions(query: string, cb: (results: SubgroupSourceOption[]) => void) {
+  querySubgroupSuggestions(query, subgroupBatchKeyword.value, query, cb)
+}
+
+function onSubgroupSourceSelect(item: SubgroupSourceOption) {
+  if (item.noResult) return
+  subgroupBatchKeyword.value = item.batchNo
+  subgroupBarcodeKeyword.value = item.barcode
+  subgroupBatchFilter.value = item.batchNo
+  subgroupBarcodeFilter.value = item.barcode
+  selectedSubgroupSourceKey.value = `${item.batchNo}\u0000${item.barcode}`
+}
+
+function clearSubgroupFilters() {
+  if (`${subgroupBatchKeyword.value}\u0000${subgroupBarcodeKeyword.value}` === selectedSubgroupSourceKey.value) return
+  subgroupBatchFilter.value = ''
+  subgroupBarcodeFilter.value = ''
+  selectedSubgroupSourceKey.value = ''
+}
+
 let barcodeTimer: ReturnType<typeof setTimeout> | undefined
 async function queryBarcodeSuggestions(queryString: string, cb: (results: TraceItemSearchResult[]) => void) {
   if (barcodeTimer) clearTimeout(barcodeTimer)
-  const kw = (queryString || '').trim()
-  if (!kw) {
+  const keyword = (queryString || '').trim()
+  if (!keyword) {
     cb([])
     return
   }
   barcodeTimer = setTimeout(async () => {
     try {
-      const res = await searchItemsByBarcodeApi(itemType.value, kw, 20, itemCode.value || undefined)
+      const res = await searchItemsByBarcodeApi(itemType.value, keyword, 20, itemCode.value || undefined)
       cb(res.data || [])
     } catch {
       cb([])
@@ -413,19 +558,15 @@ async function queryBarcodeSuggestions(queryString: string, cb: (results: TraceI
   }, 300)
 }
 
-// 选中条码后自动回填代码、名称、批次号
-function onBarcodeSelect(item: TraceItemSearchResult) {
-  if (!item) return
-  barcode.value = item.barcode || ''
-  itemCode.value = item.itemCode || ''
-  materialName.value = item.itemName || ''
-  if (item.batchNo != null) batchNo.value = item.batchNo
-  if (item.itemCode) dictMap.set(item.itemCode, { itemCode: item.itemCode, itemName: item.itemName || '' })
+function onSourceSelect(item: TraceItemSearchResult) {
+  const source = selectSpcSourceRecord({ batchNo: item.batchNo || '', barcode: item.barcode || '' })
+  batchNo.value = source.batchNo
+  barcode.value = source.barcode
+  selectedSource.value = source
 }
 
-// 条码失焦时若手填完整条码尝试补全
-function onBarcodeBlur() {
-  // 由 autocomplete 的 select 事件处理，失焦不做额外补全
+function clearSelectedSource() {
+  selectedSource.value = null
 }
 
 const filteredParams = computed(() => faiSpcParams.value)
@@ -459,16 +600,68 @@ function resetSamples() {
   sampleValues.value = new Array(currentParam.value?.subgroupSize || 0).fill(undefined)
 }
 
-/** 样本值批量粘贴：支持逗号、空格、换行、分号、制表符分隔 */
-function onPasteSamples(e: ClipboardEvent) {
+function openEntryDialog() {
+  if (!canOpenSampleEntry(currentParam.value?.spcParameterId)) {
+    ElMessage.warning('请先选择参数')
+    return
+  }
+  entryDialogVisible.value = true
+  nextTick(() => sampleInputRefs.value[0]?.focus())
+}
+
+/** 占位符：提示当前参数的规格范围 */
+const specPlaceholder = computed(() => {
+  const p = currentParam.value
+  if (!p) return '输入测量值'
+  const lsl = Number(p.lowerLimit), usl = Number(p.upperLimit)
+  if (!Number.isNaN(lsl) && !Number.isNaN(usl)) return `${lsl} ~ ${usl}`
+  if (!Number.isNaN(lsl)) return `≥ ${lsl}`
+  if (!Number.isNaN(usl)) return `≤ ${usl}`
+  return '输入测量值'
+})
+
+/** 单个样本值的规格状态样式类 */
+function sampleValClass(idx: number): string {
+  const v = sampleValues.value[idx]
+  if (v == null || v === '' || Number.isNaN(Number(v))) return ''
+  const p = currentParam.value
+  if (!p) return ''
+  const num = Number(v)
+  const usl = Number(p.upperLimit)
+  const lsl = Number(p.lowerLimit)
+  const outU = !Number.isNaN(usl) && num > usl
+  const outL = !Number.isNaN(lsl) && num < lsl
+  if (outU || outL) return 'out-spec'
+  if (!Number.isNaN(usl) && !Number.isNaN(lsl)) return 'in-spec'
+  return ''
+}
+
+/** Enter 键：跳转到下一个输入框，或提交 */
+function onSampleEnter(i: number) {
+  const action = getSampleEntryAction('enter', i, currentParam.value?.subgroupSize ?? 0)
+  if (action === 'next') {
+    sampleInputRefs.value[i]?.focus()
+    sampleInputRefs.value[i]?.select()
+  } else if (action === 'submit') {
+    onSubmit()
+  }
+}
+
+/** 粘贴：任意输入框都支持批量粘贴样本值 */
+function onSamplePaste(e: ClipboardEvent, startIdx: number) {
   const text = e.clipboardData?.getData('text') || ''
   const nums = text
     .split(/[,\s;|]+/)
     .map(Number)
     .filter((v) => !Number.isNaN(v))
-  if (nums.length >= (currentParam.value?.subgroupSize ?? 0)) {
+  const n = currentParam.value?.subgroupSize ?? 0
+  if (nums.length > 0) {
     e.preventDefault()
-    sampleValues.value = nums.slice(0, currentParam.value!.subgroupSize)
+    const remain = Math.max(0, n - startIdx)
+    // 覆盖剩余空位，多余的截断
+    for (let j = 0; j < remain; j++) {
+      sampleValues.value[startIdx + j] = nums[j] ?? undefined
+    }
   }
 }
 
@@ -484,6 +677,12 @@ function resetAllFilters() {
   itemCode.value = ''
   batchNo.value = ''
   barcode.value = ''
+  subgroupBatchKeyword.value = ''
+  subgroupBarcodeKeyword.value = ''
+  subgroupBatchFilter.value = ''
+  subgroupBarcodeFilter.value = ''
+  selectedSubgroupSourceKey.value = ''
+  selectedSource.value = null
   materialName.value = ''
   lastItemCandidates = [] as SpcItemDict[]
   selectedProcessName.value = null
@@ -493,6 +692,7 @@ function resetAllFilters() {
   selectedPendingId.value = null
   faiProcesses.value = []
   faiSpcParams.value = []
+  emitAnalysisContext()
 }
 
 function onProcessChange() {
@@ -503,6 +703,7 @@ function onProcessChange() {
   selectedPendingId.value = null
   // 加载当前代码+工序下的 SPC 参数
   loadFaiSpcParams()
+  emitAnalysisContext()
 }
 
 /** 根据当前 itemType + itemCode 加载 FAI 标准工序列表 */
@@ -549,6 +750,14 @@ watch(currentParam, (p) => {
 watch(itemType, () => {
   if (!faiInitDone) return
   itemCode.value = ''
+  batchNo.value = ''
+  barcode.value = ''
+  subgroupBatchKeyword.value = ''
+  subgroupBarcodeKeyword.value = ''
+  subgroupBatchFilter.value = ''
+  subgroupBarcodeFilter.value = ''
+  selectedSubgroupSourceKey.value = ''
+  selectedSource.value = null
   lastItemCandidates = []
   selectedProcessName.value = null
   selectedParamId.value = null
@@ -619,12 +828,6 @@ onMounted(async () => {
   // 初始化完成：此后用户手动切换分类才会清空，FAI 透传的 itemType 不再触发清空
   faiInitDone = true
 
-  // 动态计算容器高度，精确匹配实际头部 + Tabs 占用
-  nextTick(() => {
-    const head = (document.querySelector('.page-head') as HTMLElement)?.offsetHeight || 56
-    const tabs = (document.querySelector('.spc-tabs .el-tabs__header') as HTMLElement)?.offsetHeight || 40
-    containerMaxHeight.value = `calc(100vh - ${head + tabs + 24}px)`
-  })
 })
 
 /**
@@ -673,6 +876,7 @@ async function loadPendingSubgroups(paramId: number) {
 
 async function onParamChange(id: number) {
   selectedParamId.value = id
+  emitAnalysisContext()
 }
 
 async function onSubmit() {
@@ -682,6 +886,10 @@ async function onSubmit() {
   }
   if (!barcode.value?.trim()) {
     ElMessage.warning('请填写条码')
+    return
+  }
+  if (!isSelectedSourcePair(selectedSource.value, batchNo.value, barcode.value)) {
+    ElMessage.warning('请从来料/成品来源中选择批次号或条码，系统会自动回填另一项')
     return
   }
   const p = currentParam.value
@@ -709,6 +917,7 @@ async function onSubmit() {
     ElMessage.success('子组已保存，已自动重算控制限/能力')
     lastSubmittedValues.value = [...vals]
     resetSamples()
+    entryDialogVisible.value = false
     emit('saved')
   } finally {
     submitting.value = false
@@ -734,7 +943,6 @@ async function onAppendPending() {
 /* 整页高度约束：数据采集区不超视口，避免整页上下滚动 */
 .data-entry {
   padding: 4px;
-  max-height: calc(100vh - 150px);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -746,13 +954,9 @@ async function onAppendPending() {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  max-height: 46%;
-  overflow: hidden;
 }
 /* 下方子组历史：填满剩余全部空间 */
 .entry-bottom {
-  flex: 1;
-  min-height: 0;
   display: flex;
   flex-direction: column;
 }
@@ -765,22 +969,18 @@ async function onAppendPending() {
   border: 1px solid #ECE7E1;
   display: flex;
   flex-direction: column;
-  min-height: 0;
 }
 .entry-card :deep(.el-card__body) {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
 }
 
 /* 🅐 筛选区：横向 1 行紧凑布局 */
 .entry-filterbar {
-  display: flex;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  align-items: center;
   gap: 12px;
-  flex-wrap: wrap;
   flex-shrink: 0;
   padding: 8px 0 10px;
   border-bottom: 1px solid #ECE7E1;
@@ -794,16 +994,17 @@ async function onAppendPending() {
 }
 /* 代码输入框：在窄屏换行时单独占满一行，避免与工序框交叠 */
 .filter-item.flex-1 {
-  flex: 1 1 260px;
-  min-width: 220px;
+  min-width: 0;
 }
+.filter-type { grid-column: 1 / 3; grid-row: 1; }
+.top-query-code { grid-column: 3 / 6; grid-row: 1; }
+.top-query-pair { grid-column: 6 / 13; grid-row: 1; display: flex; align-items: center; gap: 12px; min-width: 0; }
+.sub-query-pair { grid-column: 1 / 12; grid-row: 2; display: flex; align-items: center; gap: 12px; min-width: 0; }
+.top-query-process, .top-query-param, .sub-query-batch, .sub-query-barcode { min-width: 0; }
 .lbl { font-size: 12px; color: #5B7A99; font-weight: 600; white-space: nowrap; }
 
 /* 录入区：内部纵向可滚（参数信息 + 样本 + 操作） */
 .entry-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
   padding-right: 4px;
 }
 
@@ -834,42 +1035,33 @@ async function onAppendPending() {
 .expand-icon { transition: transform 0.2s; margin-left: 4px; flex-shrink: 0; }
 .expand-icon.rotated { transform: rotate(180deg); }
 
-/* 🅒 底部固定 Dock：样本录入 + 提交 */
-.entry-dock {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 99;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 10px 24px;
-  background: rgba(255,255,255,0.96);
-  backdrop-filter: blur(6px);
-  border-top: 1px solid #ECE7E1;
-  box-shadow: 0 -1px 8px rgba(27,58,91,0.05);
-}
-.dock-samples { display: flex; align-items: center; gap: 10px; flex: 1; overflow-x: auto; }
-.dock-label { font-size: 12px; color: #5B7A99; font-weight: 600; white-space: nowrap; }
-.dock-grid { display: flex; gap: 8px; flex-wrap: nowrap; overflow-x: auto; }
-.dock-cell { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-.dock-actions { display: flex; gap: 8px; flex-shrink: 0; }
-
-/* Dock 栏滑入动画 */
-.dock-slide-enter-active,
-.dock-slide-leave-active {
-  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
-}
-.dock-slide-enter-from,
-.dock-slide-leave-to {
-  transform: translateY(100%);
-  opacity: 0;
-}
+.entry-start-hint { margin-top: 8px; font-size: 12px; color: #8C9BA8; }
+.entry-dialog-header { padding-right: 28px; }
+.entry-dialog-heading { color: #1B3A5B; font-size: 18px; font-weight: 700; }
+.entry-dialog-subheading { margin-top: 6px; color: #73879A; font-size: 13px; }
+.entry-dialog-context { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 14px; margin-bottom: 20px; background: #F5F8FB; border: 1px solid #DCE6EF; border-radius: 8px; }
+.entry-dialog-source-row { display: grid; grid-template-columns: 1fr 2fr; margin-bottom: 20px; overflow: hidden; border: 1px solid #DCE6EF; border-radius: 8px; background: #FFFFFF; }
+.entry-dialog-source-row > label { display: flex; align-items: center; min-width: 0; padding: 8px 12px; }
+.entry-dialog-source-row > label + label { border-left: 1px solid #DCE6EF; }
+.entry-dialog-source-row span { flex-shrink: 0; margin-right: 10px; color: #71849A; font-size: 12px; font-weight: 600; }
+.entry-dialog-source-row :deep(.el-autocomplete) { flex: 1; min-width: 0; }
+.entry-dialog-source-row :deep(.el-input__wrapper) { background: #FFFFFF; box-shadow: 0 0 0 1px #B9CBD9 inset; }
+.entry-dialog-title { font-size: 14px; font-weight: 700; color: #315470; margin-bottom: 10px; }
+.entry-dialog-title span { margin-left: 6px; font-size: 12px; font-weight: 400; color: #8C9BA8; }
+.entry-dialog-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 12px; }
+.entry-dialog-cell { position: relative; display: flex; align-items: center; gap: 6px; padding: 8px; background: #F9FBFC; border: 1px solid #E2EAF0; border-radius: 7px; }
+.entry-dialog-cell .sample-idx { color: #6D8296; font-weight: 600; }
+.entry-dialog-alert { margin-top: 16px; }
+.entry-dialog-shortcut { margin-right: auto; color: #8495A6; font-size: 12px; float: left; line-height: 32px; }
+:global(.spc-entry-dialog .el-dialog__header) { margin-right: 0; padding: 20px 24px 16px; border-bottom: 1px solid #E6EDF2; }
+:global(.spc-entry-dialog .el-dialog__body) { padding: 18px 24px 22px; }
+:global(.spc-entry-dialog .el-dialog__footer) { display: flex; align-items: center; gap: 8px; padding: 14px 24px; border-top: 1px solid #E6EDF2; }
 
 /* 筛选区重置按钮 */
 .filterbar-reset-btn {
-  flex-shrink: 0;
+  grid-column: 12 / 13;
+  grid-row: 2;
+  justify-self: end;
   align-self: center;
   margin-top: 0;
 }
@@ -877,10 +1069,27 @@ async function onAppendPending() {
 /* 样本编号 */
 .sample-idx { width: 18px; text-align: center; font-size: 12px; color: #8C9BA8; font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
 
+/* 样本值输入框规格范围视觉反馈 */
+.sample-val-input.in-spec :deep(.el-input__wrapper) {
+  box-shadow: 0 0 0 1.5px #67C23A inset;
+  background: #F0F9EB;
+}
+.sample-val-input.out-spec :deep(.el-input__wrapper) {
+  box-shadow: 0 0 0 1.5px #F56C6C inset;
+  background: #FEF0F0;
+}
+.sample-val-input :deep(.el-input__inner) {
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  font-size: 13px;
+}
+
 .num { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #5B7A99; font-variant-numeric: tabular-nums; }
 .barcode-option { display: flex; flex-direction: column; line-height: 1.3; }
 .barcode-option__code { font-weight: 600; color: var(--el-text-color-primary); }
 .barcode-option__meta { font-size: 12px; color: var(--el-text-color-secondary); }
+.subgroup-query-empty { padding: 4px 0; color: var(--el-text-color-secondary); font-size: 12px; cursor: default; }
 .flex-1 { display: flex; align-items: center; gap: 8px; }
 .filter-hint { font-size: 12px; color: #1B9C85; margin-top: 2px; line-height: 1.4; }
 .filter-hint--warn { color: #C9821B; }
