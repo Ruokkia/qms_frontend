@@ -1,20 +1,47 @@
-param(
+﻿param(
   [Parameter(Mandatory = $true)][string]$Token,
-  [string]$BaseUrl = 'http://127.0.0.1:8081'
+  [string]$BaseUrl = 'http://127.0.0.1:8080'
 )
 
+$OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = 'Stop'
-$headers = @{ Authorization = "Bearer $Token"; 'Content-Type' = 'application/json' }
+
+# 使用 curl.exe + 临时文件 UTF-8 读写，规避 PowerShell Invoke-WebRequest 中文乱码
 function Invoke-Trace([string]$Method, [string]$Path, $Body = $null) {
-  $args = @{ Method = $Method; Uri = "$BaseUrl$Path"; Headers = $headers; UseBasicParsing = $true }
-  if ($null -ne $Body) { $args.Body = ($Body | ConvertTo-Json -Compress) }
-  $result = Invoke-WebRequest @args | ConvertFrom-Json
-  if ($result.code -ne 0) { throw "API failed: $Path $($result.message)" }
-  return $result.data
+    $bodyFile = $null
+    $outFile = $null
+    try {
+        $curlArgs = @('-s', '-X', $Method, "$BaseUrl$Path", '-H', 'Content-Type: application/json', '-H', "Authorization: Bearer $Token")
+        if ($null -ne $Body) {
+            $json = $Body | ConvertTo-Json -Compress -Depth 5
+            $bodyFile = [System.IO.Path]::GetTempFileName()
+            [System.IO.File]::WriteAllText($bodyFile, $json, [System.Text.Encoding]::UTF8)
+            $curlArgs += '--data-binary'; $curlArgs += "@$bodyFile"
+        }
+        $outFile = [System.IO.Path]::GetTempFileName()
+        $curlArgs += '-o'; $curlArgs += $outFile
+        curl.exe @curlArgs
+        $text = [System.IO.File]::ReadAllText($outFile, [System.Text.Encoding]::UTF8)
+        $result = $text | ConvertFrom-Json
+    } catch {
+        return [PSCustomObject]@{ code = -1; message = $_.Exception.Message; data = $null }
+    } finally {
+        if ($bodyFile -and (Test-Path $bodyFile)) { Remove-Item $bodyFile -Force }
+        if ($outFile -and (Test-Path $outFile)) { Remove-Item $outFile -Force }
+    }
+    # 断言化：code==0 且 data 非空
+    if ($null -eq $result -or $result.code -ne 0) {
+        throw "API failed: $Path -> code=$($result.code) msg=$($result.message)"
+    }
+    if ($null -eq $result.data) {
+        throw "API data empty: $Path (断言：字段非空)"
+    }
+    return $result.data
 }
 
 $summary = Invoke-Trace GET '/api/v2/incoming-trace/summary'
-if ($summary.totalNodes -lt 10) { throw 'Seed data is missing' }
+if ($summary.totalNodes -lt 10) { throw 'Seed data is missing (summary.totalNodes < 10)' }
 
 $down = Invoke-Trace GET '/api/v2/incoming-trace/tree?rootBarcode=FG-A100&direction=DOWN'
 if ($down.root.children.Count -lt 2) { throw 'FG-A100 tree is incomplete' }
@@ -26,6 +53,7 @@ $barcode = "MAT-SMOKE-$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
 $createdId = Invoke-Trace POST '/api/v2/incoming-trace/nodes' @{
   nodeType = 'MATERIAL'; barcode = $barcode; name = 'Smoke test material'; materialCode = 'SMOKE-001'; materialBatchNo = 'LOT-SMOKE'
 }
+if (-not $createdId) { throw 'Created node id is empty' }
 $null = Invoke-Trace POST '/api/v2/incoming-trace/relations' @{
   parentNodeId = 2; childNodeId = $createdId; quantity = 1; workOrderNo = 'WO-SMOKE'; processName = 'Smoke test'
 }
