@@ -54,6 +54,26 @@ export interface ExceptionOrder {
   updatedBy?: string
   createdAt?: string
   updatedAt?: string
+  /** 客诉：客户名称（来源类型=客诉时必填） */
+  customerName?: string
+  /** 客诉：客诉单号 */
+  complaintNo?: string
+  /** 过程异常：工序（下拉选固化工序库） */
+  processStep?: string
+  /** 过程异常：产线 */
+  productionLine?: string
+}
+
+
+/** 异常单「选择源头记录」聚合查询返回项（对齐 ExceptionSourceOptionVO） */
+export interface ExceptionSourceOptionVO {
+  id: number
+  sourceType?: string
+  materialCode?: string
+  materialName?: string
+  batchNo?: string
+  supplierName?: string
+  workOrderNo?: string
 }
 
 

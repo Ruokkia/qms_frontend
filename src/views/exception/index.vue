@@ -52,7 +52,7 @@
           <el-table-column label="供应商 / 物料" min-width="150"><template #default="{ row }"><b>{{ row.supplierName || '未关联供应商' }}</b><small>{{ row.materialCode || '—' }}</small></template></el-table-column>
           <el-table-column prop="defectDesc" label="不良描述" min-width="150" show-overflow-tooltip />
           <el-table-column label="当前阶段" width="130"><template #default="{ row }"><span class="stage-text">{{ stageLabel(row) }}</span></template></el-table-column>
-          <el-table-column label="责任人" width="100"><template #default="{ row }"><span class="owner-text">{{ row.createdBy || '待分配' }}</span></template></el-table-column>
+          <el-table-column label="责任人" width="100"><template #default="{ row }"><span class="owner-text">{{ row.ownerName || '待指派' }}</span></template></el-table-column>
           <el-table-column label="截止日期" width="112"><template #default="{ row }"><span :class="deadlineClass(row)">{{ deadlineText(row) }}</span></template></el-table-column>
           <el-table-column label="操作" width="105" fixed="right"><template #default="{ row }"><el-button link type="success" @click.stop="goDetail(row)">{{ isUrgent(row) ? '立即处理' : '处理' }}</el-button></template></el-table-column>
         </el-table>
@@ -89,23 +89,83 @@
     </el-dialog>
     <el-dialog v-model="escalationVisible" title="供应商升级管理" width="980" destroy-on-close><ExceptionEscalation /></el-dialog>
     <!-- 新建异常单 -->
-    <el-dialog v-model="createVisible" title="新建异常单" width="600" @closed="resetCreateForm">
+    <el-dialog v-model="createVisible" title="新建异常单" width="640" @closed="resetCreateForm">
       <el-form ref="createFormRef" :model="createForm" :rules="createFormRules" label-width="100px">
         <el-form-item label="来源类型" prop="sourceType">
           <el-select v-model="createForm.sourceType" placeholder="选择来源类型" style="width: 100%">
             <el-option v-for="s in SOURCE_TYPE_OPTIONS" :key="s.value" :label="s.label" :value="s.value" />
           </el-select>
         </el-form-item>
+
+        <!-- A 组：强制选源头记录，带出只读字段 -->
+        <template v-if="isGroupA">
+          <el-form-item label="源头记录" prop="sourceId">
+            <el-button type="primary" plain @click="sourceSelectorVisible = true">选择源头记录</el-button>
+            <span v-if="selectedSourceLabel" class="ml-3 text-gray-500">{{ selectedSourceLabel }}</span>
+          </el-form-item>
+          <el-form-item label="供应商" prop="supplierName">
+            <el-input v-model="createForm.supplierName" disabled placeholder="选源头后自动带出（只读）" />
+          </el-form-item>
+          <el-form-item label="物料编码" prop="materialCode">
+            <el-input v-model="createForm.materialCode" disabled placeholder="选源头后自动带出（只读）" />
+          </el-form-item>
+          <el-form-item label="批号/序列号" prop="materialBatchNo">
+            <el-input v-model="createForm.materialBatchNo" disabled placeholder="选源头后自动带出（只读）" />
+          </el-form-item>
+          <el-form-item label="工单/订单号" prop="workOrderId">
+            <el-input v-model="createForm.workOrderId" disabled placeholder="选源头后自动带出（只读）" />
+          </el-form-item>
+        </template>
+
+        <!-- B 组：手工录入 + 物料编码远程模糊搜索 -->
+        <template v-else>
+          <el-form-item label="物料编码" prop="materialCode">
+            <el-select
+              v-model="createForm.materialCode"
+              filterable
+              remote
+              :remote-method="onMaterialRemoteSearch"
+              :loading="materialSearchLoading"
+              placeholder="输入物料编码/名称模糊搜索"
+              style="width: 100%"
+              @change="onMaterialPicked"
+            >
+              <el-option v-for="o in materialSearchOptions" :key="o.id" :label="`${o.materialCode} / ${o.materialName}`" :value="o.materialCode" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="供应商名称" prop="supplierName">
+            <el-input v-model="createForm.supplierName" placeholder="选填，可随物料搜索带出" maxlength="100" />
+          </el-form-item>
+        </template>
+
+        <!-- 客诉专属 -->
+        <template v-if="isComplaint">
+          <el-form-item label="客户名称" prop="customerName">
+            <el-input v-model="createForm.customerName" placeholder="请输入客户名称" maxlength="100" />
+          </el-form-item>
+          <el-form-item label="客诉单号" prop="complaintNo">
+            <el-input v-model="createForm.complaintNo" placeholder="选填，客户投诉单号" maxlength="60" />
+          </el-form-item>
+        </template>
+
+        <!-- 过程异常专属 -->
+        <template v-if="isProcess">
+          <el-form-item label="工序" prop="processStep">
+            <el-select v-model="createForm.processStep" placeholder="选择固化工序" style="width: 100%">
+              <el-option v-for="p in processOptions" :key="p.id" :label="p.processName" :value="p.processName" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="产线" prop="productionLine">
+            <el-input v-model="createForm.productionLine" placeholder="选填，如 SMT-1" maxlength="60" />
+          </el-form-item>
+        </template>
+
+        <el-divider />
+
         <el-form-item label="严重等级" prop="severity">
           <el-select v-model="createForm.severity" placeholder="选择严重等级" style="width: 100%">
             <el-option v-for="s in SEVERITY_OPTIONS" :key="s.value" :label="s.label" :value="s.value" />
           </el-select>
-        </el-form-item>
-        <el-form-item label="供应商名称" prop="supplierName">
-          <el-input v-model="createForm.supplierName" placeholder="选填，如来自供应商" maxlength="100" />
-        </el-form-item>
-        <el-form-item label="物料编码" prop="materialCode">
-          <el-input v-model="createForm.materialCode" placeholder="选填" maxlength="50" />
         </el-form-item>
         <el-form-item label="不良描述" prop="defectDesc">
           <el-input v-model="createForm.defectDesc" type="textarea" :rows="3" placeholder="请输入不良现象的详细描述" maxlength="500" />
@@ -115,6 +175,9 @@
         </el-form-item>
         <el-form-item label="总数量" prop="totalQty">
           <el-input-number v-model="createForm.totalQty" :min="0" :step="1" controls-position="right" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="处理方式" prop="handlingMethod">
+          <el-input v-model="createForm.handlingMethod" placeholder="选填，如退货/返工/挑选使用" maxlength="100" />
         </el-form-item>
         <el-form-item label="整改截止" prop="deadline">
           <el-date-picker v-model="createForm.deadline" type="date" placeholder="选填" style="width: 100%" value-format="YYYY-MM-DD" />
@@ -128,6 +191,9 @@
         <el-button type="primary" :loading="createSaving" @click="submitCreate">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 源头记录选择弹窗 -->
+    <SourceSelector v-model="sourceSelectorVisible" :source-type="createForm.sourceType" @select="onSourceSelected" />
   </div>
 </template>
 
@@ -136,10 +202,13 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import { getExceptionAnalysisApi, getExceptionListApi, getExceptionStatsApi, getSupplierExceptionSummaryApi, checkEscalationApi, createExceptionApi } from '@/api/exception'
-import type { ExceptionAnalysisItem, ExceptionOrder, ExceptionStats, SupplierExceptionSummary } from '@/types/exception'
+import { getExceptionAnalysisApi, getExceptionListApi, getExceptionStatsApi, getSupplierExceptionSummaryApi, checkEscalationApi, createExceptionApi, getSourceOptionsApi } from '@/api/exception'
+import { getProcessesApi } from '@/api/spc'
+import type { ExceptionAnalysisItem, ExceptionOrder, ExceptionStats, SupplierExceptionSummary, ExceptionSourceOptionVO } from '@/types/exception'
+import type { SpcProcess } from '@/types/spc'
 import ExceptionEscalation from './components/ExceptionEscalation.vue'
 import QualityRuleDialog from '@/components/quality/QualityRuleDialog.vue'
+import SourceSelector from './SourceSelector.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -173,18 +242,45 @@ const createFormRef = ref()
 const createForm = reactive({
   sourceType: '' as string,
   severity: '' as string,
+  // 源头记录（A 组选中后回填；sourceId 为只读溯源主键）
+  sourceId: undefined as number | undefined,
   supplierName: '',
   materialCode: '',
+  materialBatchNo: '',
+  workOrderId: '',
+  // 可改字段
   defectDesc: '',
   defectQty: 0 as number,
   totalQty: 0 as number,
+  handlingMethod: '',
+  // B 组专属
+  customerName: '',
+  complaintNo: '',
+  processStep: '',
+  productionLine: '',
+  // 通用
   deadline: '' as string,
   remark: '',
 })
+// 是否 A 组（来料/首件/成品）：必须选源头记录
+const isGroupA = computed(() => ['来料不良', '首件不良', '成品不良'].includes(createForm.sourceType))
+// 是否为客诉
+const isComplaint = computed(() => createForm.sourceType === '客诉')
+// 是否为过程异常
+const isProcess = computed(() => createForm.sourceType === '过程异常')
+// 选中的源头记录编码（用于 A 组只读展示）
+const selectedSourceLabel = ref('')
+
 const createFormRules = {
   sourceType: [{ required: true, message: '请选择来源类型', trigger: 'change' }],
   severity: [{ required: true, message: '请选择严重等级', trigger: 'change' }],
   defectDesc: [{ required: true, message: '请输入不良描述', trigger: 'blur' }],
+  sourceId: [{ required: true, validator: (_r: unknown, v: unknown, cb: (e?: Error) => void) => {
+    if (isGroupA.value && (v === undefined || v === null)) { cb(new Error('请选择源头记录')) } else { cb() }
+  }, trigger: 'change' }],
+  customerName: [{ required: true, validator: (_r: unknown, v: string, cb: (e?: Error) => void) => {
+    if (isComplaint.value && !v) { cb(new Error('客诉类异常单客户名称必填')) } else { cb() }
+  }, trigger: 'blur' }],
 }
 const suppliers = ref<SupplierExceptionSummary[]>([])
 const keyword = ref('')
@@ -243,21 +339,71 @@ function formatDateTime(value?: string) { return value ? value.replace('T', ' ')
 function goSupplier(supplierId: number) { router.push({ path: '/exception', query: { supplierId: String(supplierId), escalation: '1' } }) }
 
 // ── 新建异常单 ──
+const sourceSelectorVisible = ref(false)
+const processOptions = ref<SpcProcess[]>([])
+const materialSearchLoading = ref(false)
+const materialSearchOptions = ref<ExceptionSourceOptionVO[]>([])
+
 function resetCreateForm() {
   createForm.sourceType = ''
   createForm.severity = ''
+  createForm.sourceId = undefined
   createForm.supplierName = ''
   createForm.materialCode = ''
+  createForm.materialBatchNo = ''
+  createForm.workOrderId = ''
   createForm.defectDesc = ''
   createForm.defectQty = 0
   createForm.totalQty = 0
+  createForm.handlingMethod = ''
+  createForm.customerName = ''
+  createForm.complaintNo = ''
+  createForm.processStep = ''
+  createForm.productionLine = ''
   createForm.deadline = ''
   createForm.remark = ''
+  selectedSourceLabel.value = ''
   createFormRef.value?.clearValidate?.()
 }
 function openCreate() {
   resetCreateForm()
+  loadProcessOptions()
   createVisible.value = true
+}
+async function loadProcessOptions() {
+  if (processOptions.value.length) { return }
+  try {
+    const res = await getProcessesApi()
+    if (res.code === 0) { processOptions.value = res.data ?? [] }
+  } catch { /* 工序列表非强依赖，失败静默 */ }
+}
+// A 组：选源头记录后回填只读 + 可改字段
+function onSourceSelected(opt: ExceptionSourceOptionVO) {
+  createForm.sourceId = opt.id
+  createForm.materialCode = opt.materialCode || ''
+  createForm.supplierName = opt.supplierName || ''
+  createForm.materialBatchNo = opt.batchNo || ''
+  createForm.workOrderId = opt.workOrderNo || ''
+  selectedSourceLabel.value = `${opt.materialCode || ''} / ${opt.materialName || ''}`
+}
+// B 组：物料编码远程模糊搜索（来料 + 成品）
+async function onMaterialRemoteSearch(keyword: string) {
+  if (!keyword) { materialSearchOptions.value = []; return }
+  materialSearchLoading.value = true
+  try {
+    const res = await getSourceOptionsApi({ sourceType: createForm.sourceType, keyword, page: 1, size: 50 })
+    materialSearchOptions.value = res.data?.list ?? []
+  } finally {
+    materialSearchLoading.value = false
+  }
+}
+function onMaterialPicked(code: string) {
+  const opt = materialSearchOptions.value.find(o => o.materialCode === code)
+  if (!opt) { return }
+  createForm.materialCode = opt.materialCode || ''
+  createForm.supplierName = opt.supplierName || ''
+  createForm.materialBatchNo = opt.batchNo || ''
+  createForm.workOrderId = opt.workOrderNo || ''
 }
 async function submitCreate() {
   try {
@@ -268,13 +414,22 @@ async function submitCreate() {
   const payload: Partial<ExceptionOrder> = {
     sourceType: createForm.sourceType,
     severity: createForm.severity,
+    sourceId: createForm.sourceId,
     supplierName: createForm.supplierName || undefined,
     materialCode: createForm.materialCode || undefined,
+    materialBatchNo: createForm.materialBatchNo || undefined,
+    // workOrderId 在 Java 端是 Long，前端只展示 workOrderNo 字符串，不传给后端
+    // workOrderId: createForm.workOrderId || undefined,
     defectDesc: createForm.defectDesc,
     defectQty: createForm.defectQty || undefined,
     totalQty: createForm.totalQty || undefined,
+    handlingMethod: createForm.handlingMethod || undefined,
     deadline: createForm.deadline || undefined,
     remark: createForm.remark || undefined,
+    customerName: createForm.customerName || undefined,
+    complaintNo: createForm.complaintNo || undefined,
+    processStep: createForm.processStep || undefined,
+    productionLine: createForm.productionLine || undefined,
   }
   createSaving.value = true
   try {

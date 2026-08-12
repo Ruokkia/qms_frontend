@@ -20,6 +20,7 @@ import type {
   EightDD1TeamDTO,
   EightDD1ReviewDTO,
   ExceptionUserOptionVO,
+  ExceptionSourceOptionVO,
   StageApprovalDTO,
   ExceptionApprovalConfigVO,
   SupplierExceptionSummary,
@@ -47,6 +48,16 @@ export function getExceptionDetailApi(id: number): Promise<ApiResult<ExceptionDe
 /** 新增异常单 */
 export function createExceptionApi(data: Partial<ExceptionOrder>): Promise<ApiResult<ExceptionOrder>> {
   return apiPost<ExceptionOrder>(BASE, data)
+}
+
+/** 异常单「选择源头记录」聚合查询（按来源类型分库模糊搜索） */
+export function getSourceOptionsApi(params: {
+  sourceType: string
+  keyword?: string
+  page?: number
+  size?: number
+}): Promise<ApiResult<PageResult<ExceptionSourceOptionVO>>> {
+  return apiGet<PageResult<ExceptionSourceOptionVO>>(`${BASE}/source-options`, { params })
 }
 
 /** 更新异常单 */
