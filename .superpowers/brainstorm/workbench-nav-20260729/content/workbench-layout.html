@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>康立 QMS 工作台原型</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Microsoft YaHei", system-ui, sans-serif; color: #1e293b; background: #f1f5f9; }
+    .app { min-height: 100vh; padding: 28px; }
+    .page { max-width: 1240px; margin: 0 auto; }
+    .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .eyebrow { margin: 0 0 6px; color: #64748b; font-size: 13px; }
+    h1 { margin: 0; font-size: 25px; letter-spacing: -.4px; }
+    .identity { text-align: right; color: #64748b; font-size: 13px; line-height: 1.7; }
+    .identity b { color: #334155; }
+    .panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; box-shadow: 0 8px 24px rgba(15, 23, 42, .05); }
+    .nav-panel { padding: 18px; }
+    .nav-head { display: flex; gap: 16px; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .nav-title { font-weight: 700; font-size: 16px; }
+    .nav-tip { color: #94a3b8; font-size: 13px; }
+    .search { display: flex; align-items: center; gap: 8px; width: 280px; height: 36px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0 11px; color: #94a3b8; font-size: 13px; }
+    .search span { font-size: 17px; }
+    .groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .group { border: 1px solid #e7edf4; border-radius: 10px; overflow: hidden; }
+    .group-name { padding: 9px 12px; background: #f8fafc; border-bottom: 1px solid #edf2f7; color: #475569; font-size: 13px; font-weight: 700; }
+    .items { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); padding: 7px; gap: 4px; }
+    .item { display: flex; align-items: center; min-width: 0; gap: 7px; padding: 7px; border-radius: 7px; color: #334155; font-size: 13px; }
+    .item:hover { background: #edf5ff; color: #1769d1; }
+    .icon { width: 24px; height: 24px; flex: 0 0 24px; display: grid; place-items: center; border-radius: 6px; background: #eff6ff; color: #2877df; font-size: 13px; }
+    .item span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .shortcuts { display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px; margin-top: 16px; }
+    .quick { padding: 16px 18px; }
+    .quick h2 { margin: 0 0 12px; font-size: 15px; }
+    .quick-list { display: flex; gap: 9px; }
+    .quick-btn { display: flex; align-items: center; gap: 7px; padding: 8px 11px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; color: #334155; font-size: 13px; }
+    .quick-btn:first-child { background: #eff6ff; border-color: #bfdbfe; color: #1769d1; }
+    .notice { padding: 16px 18px; display: flex; align-items: center; gap: 11px; }
+    .notice-mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: #ecfdf5; color: #16a34a; }
+    .notice strong { display: block; font-size: 14px; margin-bottom: 3px; }
+    .notice p { margin: 0; font-size: 12px; color: #64748b; }
+    .callout { margin: 16px 2px 0; color: #64748b; font-size: 13px; line-height: 1.7; }
+    .callout b { color: #1d4ed8; }
+    @media (max-width: 900px) { .groups { grid-template-columns: 1fr 1fr; } .shortcuts { grid-template-columns: 1fr; } }
+    @media (max-width: 640px) { .app { padding: 16px; } .top, .nav-head { align-items: flex-start; flex-direction: column; } .identity { text-align: left; } .search { width: 100%; } .groups { grid-template-columns: 1fr; } .quick-list { flex-wrap: wrap; } }
+  </style>
+</head>
+<body>
+  <div class="app"><div class="page">
+    <header class="top">
+      <div><p class="eyebrow">2026 年 7 月 29 日 · 星期三</p><h1>上午好，李明</h1></div>
+      <div class="identity"><b>深圳分公司 · 质量工程师</b><br>上次登录：今天 08:35</div>
+    </header>
+    <section class="panel nav-panel">
+      <div class="nav-head"><div><div class="nav-title">功能导航 <span class="nav-tip">按业务场景集中展示</span></div></div><div class="search"><span>⌕</span> 搜索功能、模块或关键字</div></div>
+      <div class="groups">
+        <section class="group"><div class="group-name">质量检验</div><div class="items"><div class="item"><i class="icon">首</i><span>首件校验</span></div><div class="item"><i class="icon">来</i><span>来料检验</span></div><div class="item"><i class="icon">成</i><span>成品检验</span></div><div class="item"><i class="icon">不</i><span>生产不良</span></div></div></section>
+        <section class="group"><div class="group-name">过程质量</div><div class="items"><div class="item"><i class="icon">S</i><span>SPC 过程能力</span></div><div class="item"><i class="icon">异</i><span>质量异常</span></div><div class="item"><i class="icon">溯</i><span>来料追溯</span></div><div class="item"><i class="icon">工</i><span>过程工具</span></div></div></section>
+        <section class="group"><div class="group-name">系统管理</div><div class="items"><div class="item"><i class="icon">账</i><span>账号管理</span></div><div class="item"><i class="icon">角</i><span>角色权限</span></div><div class="item"><i class="icon">审</i><span>审计日志</span></div><div class="item"><i class="icon">设</i><span>系统设置</span></div></div></section>
+      </div>
+    </section>
+    <section class="shortcuts"><div class="panel quick"><h2>常用操作</h2><div class="quick-list"><div class="quick-btn">✎ 录入首件</div><div class="quick-btn">⚠ 上报异常</div><div class="quick-btn">⌕ 查询追溯</div></div></div><div class="panel notice"><div class="notice-mark">✓</div><div><strong>从导航开始处理工作</strong><p>模块按权限显示；搜索只负责快速定位，不再单独占用一整行。</p></div></div></section>
+    <p class="callout"><b>原型要点：</b>导航卡片改为两列紧凑入口，每个业务分组固定在同一屏；搜索嵌在导航标题右侧，成为辅助定位而不是一个独立模块。</p>
+  </div></div>
+</body>
+</html>
