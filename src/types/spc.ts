@@ -15,6 +15,8 @@ export interface SpcProcess {
   plantCode: string
   plantName: string
   version?: number
+  /** 该工序关联到的 FAI 检验标准数（按 processCode+plantCode 关联，is_deleted=0）；>0 则工序不可删 */
+  linkedStandardCount?: number
 }
 
 /** 关键参数定义（完整字段；字典层表单仅编辑基础字段，USL/LSL/n/控制图归标准层） */
@@ -39,6 +41,8 @@ export interface SpcParameter {
   version?: number
   /** 该参数下已录入的子组数量（批量查询时返回，用于删除守卫：>0 则不可删） */
   subgroupCount?: number
+  /** 该参数被 FAI 检验标准引用的次数（批量查询时返回，用于删除守卫：>0 则不可删） */
+  faiReferenceCount?: number
 }
 
 /** 采样明细 */

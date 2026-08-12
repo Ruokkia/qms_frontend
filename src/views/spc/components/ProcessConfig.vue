@@ -30,8 +30,8 @@
               <template #default="{ row }">
                 <el-button link type="primary" size="small" @click.stop="openProcessDialog(row)">编辑</el-button>
                 <el-tooltip
-                  v-if="processSubgroupCounts[row.id]"
-                  content="该工序下存在子组数据，无法删除"
+                  v-if="(row as SpcProcess).linkedStandardCount || processSubgroupCounts[row.id] || processFaiRefCounts[row.id]"
+                  :content="(row as SpcProcess).linkedStandardCount ? '该工序已关联检验标准，无法删除' : processSubgroupCounts[row.id] ? '该工序下存在子组数据，无法删除' : '该工序下参数被检验标准引用，无法删除'"
                   placement="top"
                 >
                   <span class="btn-disabled-wrapper">
@@ -85,8 +85,8 @@
               <template #default="{ row }">
                 <el-button link type="primary" size="small" @click.stop="openParamDialog(row)">编辑</el-button>
                 <el-tooltip
-                  v-if="(row as SpcParameter).subgroupCount"
-                  content="该参数下存在子组数据，无法删除"
+                  v-if="(row as SpcParameter).subgroupCount || (row as SpcParameter).faiReferenceCount"
+                  :content="(row as SpcParameter).subgroupCount ? '该参数下存在子组数据，无法删除' : '该参数已被检验标准引用，无法删除'"
                   placement="top"
                 >
                   <span class="btn-disabled-wrapper">
@@ -207,7 +207,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useSpcStore } from '@/stores/spc'
 import type { SpcProcess, SpcParameter } from '@/types/spc'
 
@@ -235,9 +235,20 @@ const processSubgroupCounts = computed<Record<number, number>>(() => {
   }
   return map
 })
+/** 每个工序的 FAI 引用总数（key=processId, value=引用次数之和），用于删除守卫 */
+const processFaiRefCounts = computed<Record<number, number>>(() => {
+  const map: Record<number, number> = {}
+  for (const p of store.parameterList) {
+    if (p.faiReferenceCount) {
+      map[p.processId] = (map[p.processId] || 0) + p.faiReferenceCount
+    }
+  }
+  return map
+})
 const processVisible = ref(false)
 const paramVisible = ref(false)
 const saving = ref(false)
+const originalProcessCode = ref('')
 
 const blankProcess: SpcProcess & { version?: number } = {
   id: 0, processCode: '', processName: '', description: '',
@@ -257,14 +268,16 @@ const paramForm = ref<SpcParameter & { version?: number }>({ ...blankParam })
 async function onProcessChange(row: SpcProcess | null) {
   if (!row) return
   selectedProcessId.value = row.id
-  await store.fetchParameters(row.id)
+  await store.fetchParameters()
 }
 
 function openProcessDialog(row?: SpcProcess) {
   if (row) {
     processForm.value = { ...row, version: (row as any).version }
+    originalProcessCode.value = row.processCode
   } else {
     processForm.value = { ...blankProcess }
+    originalProcessCode.value = ''
   }
   processVisible.value = true
 }
@@ -278,6 +291,18 @@ async function submitProcess() {
   if (!PROCESS_CODE_RE.test(f.processCode)) {
     ElMessage.warning('工序编码须为 2~5 位大写字母（如 ASM / WDG / INS）')
     return
+  }
+  // 编辑态下工序编码发生变更时，提示用户编码变更会影响已关联的 FAI 检验标准
+  if (f.id && originalProcessCode.value && f.processCode !== originalProcessCode.value) {
+    try {
+      await ElMessageBox.confirm(
+        '修改工序编码将影响已关联的 FAI 检验标准，确认继续？',
+        '确认变更',
+        { confirmButtonText: '确认修改', cancelButtonText: '取消', type: 'warning' },
+      )
+    } catch {
+      return
+    }
   }
   saving.value = true
   try {
@@ -299,7 +324,7 @@ async function submitProcess() {
       // 新建成功后自动选中新工序，直接联动右侧参数编辑，省去手动点击
       if (newId != null) {
         selectedProcessId.value = newId
-        await store.fetchParameters(newId)
+        await store.fetchParameters()
       }
       return
     }
