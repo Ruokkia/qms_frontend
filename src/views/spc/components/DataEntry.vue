@@ -170,15 +170,9 @@
             <el-option v-for="sub in pendingSubgroups" :key="sub.id" :value="sub.id" :label="`${sub.workOrderNo || '-'} · ${sub.batchNo || '-'} · ${pendingName(sub)} · 已有 ${sub.sampleCount}/${currentParam.subgroupSize}`" />
           </el-select>
           <template v-if="selectedPending">
-            <el-descriptions :column="4" size="small" border class="param-info">
-              <el-descriptions-item label="工单">{{ selectedPending.workOrderNo || '—' }}</el-descriptions-item>
-              <el-descriptions-item label="批次">{{ selectedPending.batchNo || '—' }}</el-descriptions-item>
-              <el-descriptions-item :label="pendingTypeLabel(selectedPending)">{{ pendingName(selectedPending) }}</el-descriptions-item>
-              <el-descriptions-item label="工序">{{ selectedPending.processCode || '—' }}</el-descriptions-item>
-            </el-descriptions>
-            <div class="samples-title">补录剩余 {{ remainingCount }} 个样本值</div>
-            <div class="sample-grid"><div v-for="i in remainingCount" :key="i" class="sample-cell"><span class="sample-idx">{{ selectedPending.sampleCount + i }}</span><el-input v-model="pendingValues[i - 1]" :placeholder="specPlaceholder" size="small" class="sample-val-input" inputmode="decimal" style="width: 100%" @keydown.enter="i === remainingCount ? onAppendPending() : undefined" /></div></div>
-            <div class="actions"><el-button type="primary" :loading="submitting" @click="onAppendPending">补录并完成子组</el-button></div>
+            <div class="actions">
+              <el-button type="warning" :icon="EditPen" @click="pendingDrawerVisible = true">补录剩余 {{ remainingCount }} 个样本值</el-button>
+            </div>
           </template>
         </template>
 
@@ -187,6 +181,31 @@
         <div class="samples-title">样本实测值（需录入 {{ currentParam.subgroupSize }} 个）</div>
         <div class="entry-start-hint">点击上方“录入样本”开始录入、校验并提交本组样本</div>
         </template>
+
+        <!-- 补录抽屉：从右侧滑出，承载完整补录表单 -->
+        <el-drawer
+          v-model="pendingDrawerVisible"
+          title="补齐首件样本"
+          direction="rtl"
+          :size="420"
+          :close-on-click-modal="true"
+          append-to-body
+          class="pending-drawer"
+        >
+          <template v-if="selectedPending">
+            <div class="pending-drawer-body">
+              <el-descriptions :column="2" size="small" border class="param-info">
+                <el-descriptions-item label="工单">{{ selectedPending.workOrderNo || '—' }}</el-descriptions-item>
+                <el-descriptions-item label="批次">{{ selectedPending.batchNo || '—' }}</el-descriptions-item>
+                <el-descriptions-item :label="pendingTypeLabel(selectedPending)">{{ pendingName(selectedPending) }}</el-descriptions-item>
+                <el-descriptions-item label="工序">{{ selectedPending.processCode || '—' }}</el-descriptions-item>
+              </el-descriptions>
+              <div class="samples-title">补录剩余 {{ remainingCount }} 个样本值</div>
+              <div class="sample-grid"><div v-for="i in remainingCount" :key="i" class="sample-cell"><span class="sample-idx">{{ selectedPending.sampleCount + i }}</span><el-input v-model="pendingValues[i - 1]" :placeholder="specPlaceholder" size="small" class="sample-val-input" inputmode="decimal" style="width: 100%" @keydown.enter="i === remainingCount ? onAppendPending() : undefined" /></div></div>
+              <div class="actions"><el-button type="primary" :loading="submitting" @click="onAppendPending">补录并完成子组</el-button></div>
+            </div>
+          </template>
+        </el-drawer>
       </template>
 
       <el-empty v-else description="请选择参数后录入" :image-size="80" />
@@ -306,7 +325,7 @@ import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { ElMessage } from 'element-plus'
-import { ArrowDown } from '@element-plus/icons-vue'
+import { ArrowDown, EditPen } from '@element-plus/icons-vue'
 import { useSpcStore } from '@/stores/spc'
 import { useItemTypeStore, type ItemType } from '@/stores/itemType'
 import type { SpcSubgroup } from '@/types/spc'
@@ -366,6 +385,8 @@ const sampleValues = ref<number[]>([])
 const pendingSubgroups = ref<SpcSubgroup[]>([])
 const selectedPendingId = ref<number | null>(null)
 const pendingValues = ref<number[]>([])
+/** 补录抽屉显隐状态（仅 UI 副作用，不参与业务逻辑） */
+const pendingDrawerVisible = ref(false)
 const lastSubmittedValues = ref<number[]>([])
 /** 样本值输入框 ref 数组（Enter 键自动跳转下一个） */
 const sampleInputRefs = ref<any[]>([])
@@ -932,6 +953,7 @@ async function onAppendPending() {
   try {
     await store.appendPendingSamples(sub.id, vals)
     ElMessage.success('样本已补齐，子组已完成并纳入 SPC 统计')
+    pendingDrawerVisible.value = false
     await loadPendingSubgroups(sub.paramId)
     emit('saved')
   } finally { submitting.value = false }
@@ -940,6 +962,14 @@ async function onAppendPending() {
 </script>
 
 <style scoped>
+/* 补录抽屉内边距与表单间距 */
+.pending-drawer-body {
+  padding: 4px 4px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 /* 整页高度约束：数据采集区不超视口，避免整页上下滚动 */
 .data-entry {
   padding: 4px;
