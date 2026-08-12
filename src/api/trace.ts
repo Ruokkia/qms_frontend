@@ -89,7 +89,7 @@ export function traceQueryApi(
     ),
   }).then((response: AxiosResponse<ApiResult<{ root: RawTraceNode; direction: string; visitedNodes: number; summary: Record<string, number> }>>) => {
     const data = response.data.data!
-    const convert = (n: RawTraceNode): TraceNode => ({ id: n.id, nodeType: n.nodeType, nodeCode: n.barcode, name: n.name, productCode: n.productCode ?? undefined, specification: n.specification ?? undefined, materialCode: n.materialCode ?? undefined, materialBatchNo: n.materialBatchNo ?? undefined, parentId: null, children: (n.children || []).map(convert), batchInfo: n.materialBatchNo ? { batchNo: n.materialBatchNo, materialCode: n.materialCode ?? undefined, materialName: n.name } : null })
+    const convert = (n: RawTraceNode): TraceNode => ({ id: n.id, nodeType: n.nodeType, nodeCode: n.barcode, name: n.name, productCode: n.productCode ?? undefined, specification: n.specification ?? undefined, materialCode: n.materialCode ?? undefined, materialBatchNo: n.materialBatchNo ?? undefined, parentId: null, sonLotNo: n.sonLotNo ?? undefined, children: (n.children || []).map(convert), batchInfo: n.materialBatchNo ? { batchNo: n.materialBatchNo, materialCode: n.materialCode ?? undefined, materialName: n.name } : null })
     const rootNode = convert(data.root)
     const upward = data.root?.upward ? data.root.upward.map(convert) : undefined
     return { code: 0, message: 'success', data: { rootNode, children: rootNode.children || [], upward, stats: { totalNodes: data.visitedNodes || 1, maxDepth: 8, levelCap: 8, batchCount: data.summary?.materialBatches || 0, supplierCount: 0 } } } as ApiResult<TraceTreeResult>

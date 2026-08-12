@@ -71,10 +71,6 @@
       <div class="view-seg">
         <button class="seg-btn" :class="{ active: viewMode === 'list' }" @click="switchView('list')">列表视图</button>
         <button class="seg-btn" :class="{ active: viewMode === 'tree' }" @click="switchView('tree')">树状图</button>
-        <template v-if="viewMode === 'tree'">
-          <button class="seg-btn ghost" @click="expandAll">全展开</button>
-          <button class="seg-btn ghost" @click="collapseAll">全折叠</button>
-        </template>
       </div>
     </section>
 
@@ -89,7 +85,6 @@
         <TraceTreeView
           v-else
           :result="treeResult"
-          :expand-depth="treeExpandDepth"
           :direction="direction"
           @view-detail="openDetail"
         />
@@ -140,7 +135,6 @@ const loading = ref(false)
 const errorMsg = ref('')
 const treeResult = ref<TraceTreeResult | null>(null)
 const viewMode = ref<'list' | 'tree'>('tree')
-const treeExpandDepth = ref(-1)
 
 const directions = computed(() =>
   (Object.values(TraceDirectionEnum) as TraceDirectionEnum[]).map((v) => ({
@@ -212,13 +206,6 @@ function quickQuery(code: string) {
 
 function switchView(mode: 'list' | 'tree') {
   viewMode.value = mode
-}
-
-function expandAll() {
-  treeExpandDepth.value = -1
-}
-function collapseAll() {
-  treeExpandDepth.value = 0
 }
 
 // ── 节点详情 ────────────────────────────────────────────────

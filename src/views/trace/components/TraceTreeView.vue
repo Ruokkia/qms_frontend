@@ -33,7 +33,6 @@ import {
 
 const props = defineProps<{
   result: TraceTreeResult
-  expandDepth: number
   direction: TraceDirectionEnum
 }>()
 const emit = defineEmits<{ viewDetail: [node: TraceNode] }>()
@@ -228,8 +227,9 @@ function renderChart() {
       symbol: 'circle',
       symbolSize: (value: number, params: any) => params.data?.symbolSize || 12,
       orient: 'LR',
-      expandAndCollapse: true,
-      initialTreeDepth: props.expandDepth,
+      // 节点点击统一用于打开详情抽屉，禁用 ECharts 默认的展开/收缩行为。
+      expandAndCollapse: false,
+      initialTreeDepth: -1,
       roam: true,
       // 每次渲染重置视图，避免上一次平移/缩放的状态残留导致节点跑到画布外
       center: ['50%', '50%'],
@@ -291,7 +291,6 @@ onUnmounted(() => {
 })
 
 watch(() => props.result, () => nextTick(renderChart), { deep: true })
-watch(() => props.expandDepth, () => renderChart())
 </script>
 
 <style scoped>

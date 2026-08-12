@@ -27,6 +27,13 @@ export function getFinishedGoodsDetailApi(
   return apiGet<FinishedGoodsInspection>(`${BASE}/${id}`)
 }
 
+/** 按条码（prod_batch_or_sn）查询成品检验详情 */
+export function getFinishedGoodsByBarcodeApi(
+  barcode: string,
+): Promise<ApiResult<FinishedGoodsInspection>> {
+  return apiGet<FinishedGoodsInspection>(`${BASE}/by-barcode`, { params: { barcode } })
+}
+
 /** 更新成品入库检验 */
 export function updateFinishedGoodsApi(
   id: number,

@@ -144,14 +144,15 @@
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getTraceNodeDetailApi } from '@/api/trace'
-import { getFinishedGoodsDetailApi } from '@/api/finishedGoods'
-import { getMaterialInspectionDetailApi } from '@/api/incoming'
+import { getFinishedGoodsDetailApi, getFinishedGoodsByBarcodeApi } from '@/api/finishedGoods'
+import { getMaterialInspectionDetailApi, getMaterialInspectionByBarcodeApi } from '@/api/incoming'
 import type { TraceNodeDetail } from '@/types/trace'
 import type { FinishedGoodsInspection } from '@/types/finishedGoods'
 import type { MaterialInspection } from '@/types/incoming'
 import { resolveTraceDetailTarget } from '@/utils/trace-detail-target'
 import FinishedGoodsDetailDialog from '@/views/finished-goods/components/FinishedGoodsDetailDialog.vue'
 import IncomingDetailDialog from '@/views/incoming/components/IncomingDetailDialog.vue'
+import { isErrorNotified } from '@/api/request-error'
 import {
   NodeTypeEnum,
   NODE_TYPE_LABELS,
@@ -179,7 +180,9 @@ const detail = ref<TraceNodeDetail | null>(null)
 const node = computed(() => detail.value?.detail ?? null)
 const batch = computed(() => detail.value?.batchInfo ?? null)
 const inspections = computed(() => detail.value?.inspections ?? [])
-const detailTarget = computed(() => node.value ? resolveTraceDetailTarget(node.value.id, node.value.nodeType) : null)
+const detailTarget = computed(() => node.value
+  ? resolveTraceDetailTarget(node.value.id, node.value.nodeType, props.sonLotNo ?? node.value.sonLotNo)
+  : null)
 const finishedDetailVisible = ref(false)
 const incomingDetailVisible = ref(false)
 const finishedDetail = ref<FinishedGoodsInspection | null>(null)
@@ -208,25 +211,35 @@ async function openBusinessDetail() {
   businessDetailLoading.value = true
   try {
     if (target.kind === 'finished') {
-      const res = await getFinishedGoodsDetailApi(target.id)
+      const res = 'barcode' in target
+        ? await getFinishedGoodsByBarcodeApi(target.barcode)
+        : await getFinishedGoodsDetailApi(target.id)
       if (res.code === 0 && res.data) {
         finishedDetail.value = res.data
         finishedDetailVisible.value = true
       } else {
-        ElMessage.error(res.message || '加载成品详细信息失败')
+        ElMessage.error(res.code === 0
+          ? '未找到成品检验记录'
+          : res.message || '未找到成品检验记录')
       }
       return
     }
 
-    const res = await getMaterialInspectionDetailApi(target.id)
+    const res = 'barcode' in target
+      ? await getMaterialInspectionByBarcodeApi(target.barcode)
+      : await getMaterialInspectionDetailApi(target.id)
     if (res.code === 0 && res.data) {
       incomingDetail.value = res.data
       incomingDetailVisible.value = true
     } else {
-      ElMessage.error(res.message || '加载来料详细信息失败')
+      ElMessage.error(res.code === 0
+        ? '未找到来料检验记录'
+        : res.message || '未找到来料检验记录')
     }
-  } catch {
-    ElMessage.error('加载详细信息失败，请稍后重试')
+  } catch (err) {
+    if (!isErrorNotified(err)) {
+      ElMessage.error('加载详细信息失败，请稍后重试')
+    }
   } finally {
     businessDetailLoading.value = false
   }
