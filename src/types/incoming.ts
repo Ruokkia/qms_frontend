@@ -139,6 +139,8 @@ export interface MaterialInspectionListParams extends PageParams {
   keyword?: string
   reviewStatus?: string
   inspectionResult?: string
+  /** 检验结果模糊搜索（"自定义"场景） */
+  inspectionResultLike?: string
   supplierCode?: string
   materialCode?: string
   /** 仅列表展示：关联关键物料绑定清单得到的物料条码。 */

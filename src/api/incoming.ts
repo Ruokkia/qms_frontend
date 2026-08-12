@@ -99,6 +99,13 @@ export function getMaterialInspectionDetailApi(id: number): Promise<ApiResult<Ma
   return apiGet<MaterialInspection>(`${BASE}/${id}`)
 }
 
+/** 按物料条码查询检验详情 */
+export function getMaterialInspectionByBarcodeApi(
+  barcode: string,
+): Promise<ApiResult<MaterialInspection>> {
+  return apiGet<MaterialInspection>(`${BASE}/by-barcode`, { params: { barcode } })
+}
+
 /** 更新物料检验记录 */
 export function updateMaterialInspectionApi(
   id: number,

@@ -91,7 +91,19 @@
         >
           <el-option label="合格" value="合格" />
           <el-option label="不合格" value="不合格" />
+          <el-option label="其他" value="__OTHER__" />
+          <el-option label="自定义" value="__CUSTOM__" />
         </el-select>
+        <el-input
+          v-if="query.inspectionResult === '__CUSTOM__'"
+          v-model="customInspectionKeyword"
+          placeholder="检验结果关键字"
+          clearable
+          size="default"
+          style="width: 140px"
+          @keyup.enter="handleSearch"
+          @clear="handleSearch"
+        />
         <el-select
           v-model="query.reviewStatus"
           placeholder="审核状态"
@@ -429,6 +441,9 @@ const pageList = ref<MaterialInspection[]>([])
 const pageTotal = ref(0)
 
 
+/** 检验结果「自定义」时的手动输入关键字（模糊搜索） */
+const customInspectionKeyword = ref('')
+
 async function loadList() {
   listLoading.value = true
   try {
@@ -437,7 +452,12 @@ async function loadList() {
       size: query.size,
       keyword: query.keyword,
       reviewStatus: query.reviewStatus,
-      inspectionResult: query.inspectionResult,
+      inspectionResult:
+        query.inspectionResult === '__CUSTOM__' ? undefined : query.inspectionResult || undefined,
+      inspectionResultLike:
+        query.inspectionResult === '__CUSTOM__'
+          ? customInspectionKeyword.value.trim() || undefined
+          : undefined,
     }
     if (dateField.value) {
       params.dateField = dateField.value
@@ -463,6 +483,7 @@ function resetFilter() {
   query.keyword = ''
   query.reviewStatus = ''
   query.inspectionResult = ''
+  customInspectionKeyword.value = ''
   dateField.value = ''
   startDate.value = ''
   endDate.value = ''
