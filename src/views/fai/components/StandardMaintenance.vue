@@ -80,6 +80,13 @@
         </template>
       </el-table-column>
       <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
+      <el-table-column label="引用状态" width="90" align="center">
+        <template #default="{ row }">
+          <el-tag :type="(row.usageStatus ?? 0) > 0 ? 'warning' : 'info'" size="small">
+            {{ (row.usageStatus ?? 0) > 0 ? '已引用' : '未引用' }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column label="参数项" width="80" align="center">
         <template #default="{ row }">
           <el-link type="primary" underline="never" @click="previewItems(row)">{{ (row.items || []).length }} 项</el-link>
@@ -87,8 +94,14 @@
       </el-table-column>
       <el-table-column label="操作" width="150" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" :icon="Edit" @click="openEdit(row)">编辑</el-button>
-          <el-button link type="danger" :icon="Delete" @click="remove(row)">删除</el-button>
+          <el-tooltip
+            v-if="(row.usageStatus ?? 0) > 0"
+            content="该标准已被检验记录引用，无法删除（请改为停用）"
+            placement="top"
+          >
+            <el-button link type="danger" :icon="Delete" disabled>删除</el-button>
+          </el-tooltip>
+          <el-button v-else link type="danger" :icon="Delete" @click="remove(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -303,16 +316,16 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, inject, watch, type Ref } from 'vue'
 import type { ItemType } from '@/stores/itemType'
-import { Edit, Delete, Plus, Search, QuestionFilled } from '@element-plus/icons-vue'
+import { Delete, Plus, Search, QuestionFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { getParametersApi, getProcessesApi } from '@/api/spc'
 import type { SpcParameter, SpcProcess } from '@/types/spc'
 import { searchItemsByBarcodeApi, type TraceItemSearchResult } from '@/api/trace'
+import { createLatestRequestGate } from '@/utils/latest-request'
 import type { FaiStandard, FaiStandardItemRequest, FaiStandardSaveRequest } from '@/types/fai'
 import {
   getStandardsApi,
   createStandardApi,
-  updateStandardApi,
   deleteStandardApi,
 } from '@/api/fai'
 
@@ -442,8 +455,11 @@ function addItem() {
   form.items.push(emptyItem())
 }
 
+const itemSearchGate = createLatestRequestGate()
+
 // 代码输入框：按分类在产品/物料表中模糊搜索候选，支持直接手输（预建标准）
 async function queryItemSuggestions(queryString: string, cb: (results: TraceItemSearchResult[]) => void) {
+  const requestId = itemSearchGate.begin()
   const kw = (queryString || '').trim()
   if (!kw) {
     cb([])
@@ -451,6 +467,7 @@ async function queryItemSuggestions(queryString: string, cb: (results: TraceItem
   }
   try {
     const res = await searchItemsByBarcodeApi(faiItemType.value, kw)
+    if (!itemSearchGate.isCurrent(requestId)) return
     const data = res.data || []
     // 按 itemCode 去重，避免同一代码多条批次重复出现
     const seen = new Set<string>()
@@ -461,7 +478,7 @@ async function queryItemSuggestions(queryString: string, cb: (results: TraceItem
     })
     cb(unique)
   } catch {
-    cb([])
+    if (itemSearchGate.isCurrent(requestId)) cb([])
   }
 }
 
@@ -547,39 +564,6 @@ function openCreate() {
   resetForm()
   dialogVisible.value = true
   addItem()
-}
-
-async function openEdit(row: FaiStandard) {
-  form.id = row.id
-  form.materialCode = row.materialCode
-  form.materialName = row.materialName || ''
-  form.itemBarcode = row.itemBarcode || ''
-  form.processName = row.processName
-  form.processCode = row.processCode
-    || processOptions.value.find((p) => p.processName === row.processName)?.processCode
-    || ''
-  await loadSpcParameters(form.processCode)
-  form.isActive = row.isActive
-  form.remark = row.remark || ''
-  form.effectiveDate = row.effectiveDate || ''
-  form.changeRemark = row.changeRemark || ''
-  form.items = (row.items || []).map((it) => ({
-    id: it.id,
-    paramName: it.paramName,
-    paramCode: it.paramCode,
-    paramCategory: it.paramCategory,
-    standardValue: it.standardValue,
-    upperLimit: it.upperLimit != null ? Number(it.upperLimit) : undefined,
-    lowerLimit: it.lowerLimit != null ? Number(it.lowerLimit) : undefined,
-    targetValue: it.targetValue != null ? Number(it.targetValue) : undefined,
-    subgroupSize: it.subgroupSize != null ? Number(it.subgroupSize) : undefined,
-    chartType: it.chartType || 'Xbar-R',
-    unit: it.unit,
-    isRequired: it.isRequired || '是',
-    spcParameterId: it.spcParameterId,
-    sortOrder: it.sortOrder,
-  }))
-  dialogVisible.value = true
 }
 
 function previewItems(row: FaiStandard) {
@@ -690,13 +674,8 @@ async function save() {
     }
     saving.value = true
     try {
-      if (form.id) {
-        await updateStandardApi(form.id, payload)
-        ElMessage.success('更新成功')
-      } else {
-        await createStandardApi(payload)
-        ElMessage.success('新增成功')
-      }
+      await createStandardApi(payload)
+      ElMessage.success('新增成功')
       // 回写信号给变更触发：自动回填刚保存的工序并切回（仅当来自跳转创建时父页才会消费切回）
       standardSavedResult.value = {
         itemCode: form.materialCode.trim(),
@@ -718,9 +697,11 @@ async function save() {
 }
 
 async function remove(row: FaiStandard) {
+  const usageStatus = (row as any).usageStatus ?? 0
+  const usageHint = usageStatus > 0 ? `\n该标准已被检验记录引用。` : ''
   try {
     await ElMessageBox.confirm(
-      `确认删除标准「${row.materialCode} / ${row.processName}（V${row.stdVersion}）」？该操作仅逻辑删除。`,
+      `确认删除标准「${row.materialCode} / ${row.processName}（V${row.stdVersion}）」？${usageHint}`,
       '删除确认',
       { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
     )

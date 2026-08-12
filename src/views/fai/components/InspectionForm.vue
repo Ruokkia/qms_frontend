@@ -2,7 +2,7 @@
   <el-drawer
     v-model="visible"
     :title="`首件检验录入 · ${record?.faiNo || ''}`"
-    size="720px"
+    size="780px"
     @open="onOpen"
   >
     <div v-if="record" v-loading="store.loading">
@@ -86,13 +86,13 @@
       <!-- 参数录入表 -->
       <div class="section-title">检验参数录入</div>
       <el-table :data="localItems" border stripe>
-        <el-table-column prop="paramName" label="参数名称" min-width="130" />
-        <el-table-column label="类别" width="100">
+        <el-table-column prop="paramName" label="参数名称" min-width="120" />
+        <el-table-column label="类别" min-width="70">
           <template #default="{ row }">
             <el-tag :type="categoryTag(row.paramCategory)" size="small" effect="plain">{{ row.paramCategory || '-' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="标准值" width="100">
+        <el-table-column label="标准值" min-width="70">
           <template #default="{ row }">
             <span :class="{ 'changed-field': row.hasStandardChanged }">{{ row.standardValue ?? '-' }}</span>
             <el-tooltip v-if="row.hasStandardChanged && row.latestStandardValue !== undefined" effect="dark" placement="top">
@@ -101,34 +101,34 @@
             </el-tooltip>
           </template>
         </el-table-column>
-        <el-table-column label="下限" width="90">
+        <el-table-column label="下限" min-width="65">
           <template #default="{ row }">
             <span :class="{ 'changed-field': row.hasStandardChanged }">{{ row.lowerLimit ?? '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="上限" width="90">
+        <el-table-column label="上限" min-width="65">
           <template #default="{ row }">
             <span :class="{ 'changed-field': row.hasStandardChanged }">{{ row.upperLimit ?? '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="单位" width="70">
+        <el-table-column label="单位" min-width="55">
           <template #default="{ row }">
             <span :class="{ 'changed-field': row.hasStandardChanged }">{{ row.unit ?? '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="实际值" width="170">
+        <el-table-column label="实际值" min-width="130">
           <template #default="{ row }">
             <el-input-number
               v-model="row.actualValue"
               :precision="4"
               :controls="false"
               :disabled="record?.signatureStatus === '已签'"
-              style="width: 150px"
+              style="width: 120px"
               placeholder="录入"
             />
           </template>
         </el-table-column>
-        <el-table-column label="判定" width="90">
+        <el-table-column label="判定" min-width="65">
           <template #default="{ row }">
             <el-tag :type="resultTag(clientJudge(row))" effect="light">{{ clientJudge(row) }}</el-tag>
           </template>

@@ -175,8 +175,8 @@ export interface FaiStandard {
   lastReviewedAt?: string
   /** 复审间隔天数（P3：定期复审提醒） */
   reviewIntervalDays?: number
-  /** 被引用次数（P3：执行情况统计） */
-  usageCount?: number
+  /** 引用状态（0=未引用，1=已引用）（P3：执行情况统计） */
+  usageStatus?: number
   /** 最近引用时间（P3：执行情况统计） */
   lastUsedAt?: string
   /** 是否复审逾期（前端计算或后端返回） */
