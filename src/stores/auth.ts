@@ -18,8 +18,15 @@ export const useAuthStore = defineStore('auth', () => {
   const plantCode = computed(() => user.value?.plantCode || 'SZ')
   const allowedModules = computed<ModuleKey[]>(() => user.value?.modulePermissions || [])
   const canSwitchArea = computed(() => user.value?.canSwitchArea === true)
+  const isAdmin = computed(() => user.value?.roleCode === 'R00')
+  const isQualityManager = computed(() => user.value?.roleCode === 'R06')
 
   function hasModule(key: ModuleKey): boolean {
+    // 超级管理员和质量经理均具备全模块数据范围。新模块在数据库迁移完成前
+    // 可能尚未出现在当前会话缓存的 modulePermissions 中，不能因此隐藏菜单或拦截路由。
+    if (user.value?.roleCode === 'R00' || user.value?.roleCode === 'R06') {
+      return true
+    }
     return allowedModules.value.includes(key)
   }
 
@@ -93,6 +100,8 @@ export const useAuthStore = defineStore('auth', () => {
     plantCode,
     allowedModules,
     canSwitchArea,
+    isAdmin,
+    isQualityManager,
     hasModule,
     setUser,
     updateToken,

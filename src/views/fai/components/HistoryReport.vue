@@ -19,6 +19,11 @@
     </div>
 
     <el-table :data="list" v-loading="loading" border stripe height="400">
+      <el-table-column label="分类" width="90">
+        <template #default="{ row }">
+          <el-tag size="small" effect="light">{{ row.itemType === 'PRODUCT' ? '产品' : row.itemType === 'MATERIAL' ? '物料' : typeLabel }}</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="faiNo" label="首件编号" width="190" />
       <el-table-column :label="nameLabel" prop="itemName" min-width="140">
         <template #default="{ row }">

@@ -18,6 +18,7 @@ export interface ExceptionOrder {
   supplierName?: string
   workOrderId?: number
   materialCode?: string
+  materialBatchNo?: string
   defectDesc?: string
   defectQty?: number
   totalQty?: number

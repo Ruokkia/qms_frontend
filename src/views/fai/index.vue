@@ -1,18 +1,18 @@
 <template>
   <div class="page-container">
     <div class="page-card">
-      <!-- 题头（标题左对齐 + 分类靠右） -->
+      <!-- 题头（标题 + 厂区 + 分类选择器 同处一行左对齐） -->
       <header class="page-header">
         <div class="header-left">
           <h1 class="header-title">首件检验管理</h1>
           <span class="header-plant">{{ auth.user?.plantName }}分公司</span>
-        </div>
-        <div class="fai-item-type-inline">
-          <span class="fai-item-type__label">分类</span>
-          <el-radio-group :model-value="faiItemType" @update:model-value="onItemTypeChange" size="small">
-            <el-radio-button value="PRODUCT">产品</el-radio-button>
-            <el-radio-button value="MATERIAL">物料</el-radio-button>
-          </el-radio-group>
+          <div class="fai-item-type-inline">
+            <span class="fai-item-type__label">分类</span>
+            <el-radio-group :model-value="faiItemType" @update:model-value="onItemTypeChange" size="default">
+              <el-radio-button value="PRODUCT">产品</el-radio-button>
+              <el-radio-button value="MATERIAL">物料</el-radio-button>
+            </el-radio-group>
+          </div>
         </div>
       </header>
 
@@ -150,19 +150,19 @@ function onInspectUpdated() {
 </script>
 
 <style scoped>
-/* ── 题头（标题左对齐 + 分类靠右） ── */
+/* ── 题头（标题 + 厂区 + 分类选择器 同行左对齐） ── */
 .page-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   margin-bottom: 10px;
   padding-bottom: 10px;
   border-bottom: 1px solid #edf0f4;
 }
 .header-left {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 16px;
 }
 .header-title {
   font-size: 20px;
@@ -174,12 +174,13 @@ function onInspectUpdated() {
   font-size: 12px;
   color: #8c9ba8;
 }
-/* ── 分类选择器（顶栏右侧） ── */
+/* ── 分类选择器（标题行右侧） ── */
 .fai-item-type-inline {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: 4px;
 }
 .fai-item-type__label {
   font-size: 12px;

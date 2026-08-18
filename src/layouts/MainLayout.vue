@@ -13,7 +13,7 @@
             v-for="item in group.items"
             :key="item.key"
             class="nav-item"
-            :class="{ active: currentModule === item.key.toLowerCase() }"
+            :class="{ active: isActive(item) }"
             @click="router.push(item.path)"
           >
             <el-icon :size="18">
@@ -110,14 +110,16 @@ const passwordForm = reactive({ currentPassword: '', newPassword: '', confirmPas
 const visibleNavGroups = computed(() => {
   return NAV_GROUPS.map((g) => ({
     ...g,
-    items: g.items.filter((item) => item.key === 'dashboard' || auth.hasModule(item.key)),
+    items: g.items.filter((item) => item.key === 'dashboard' || auth.hasModule((item.module ?? item.key) as any)),
   })).filter((g) => g.items.length > 0)
 })
 
-const currentModule = computed(() => {
-  const name = route.name as string
-  return name?.toLowerCase() || ''
-})
+/** 导航高亮只按路由路径判断；同一权限模块下的多个子菜单不得同时高亮。 */
+function isActive(item: { key: string; path: string }): boolean {
+  const itemPath = item.path.split('?')[0]
+  if (route.path === itemPath) return true
+  return itemPath !== '/' && route.path.startsWith(itemPath + '/')
+}
 
 function onAreaChange(val: PlantCode) {
   auth.switchArea(val)
@@ -196,7 +198,28 @@ async function onChangePassword() {
 .sidebar-nav {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 8px 0;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+}
+.sidebar-nav::-webkit-scrollbar {
+  width: 7px;
+}
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(148, 163, 184, 0.62);
 }
 .nav-group-label {
   padding: 12px 20px 4px;

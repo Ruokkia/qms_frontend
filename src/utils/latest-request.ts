@@ -1,14 +1,17 @@
-/** Prevent an older asynchronous response from replacing a newer request's result. */
-export function createLatestRequestGate() {
-  let current = 0
+export interface LatestRequestGate {
+  begin(): number
+  isCurrent(id: number): boolean
+}
 
+export function createLatestRequestGate(): LatestRequestGate {
+  let current = 0
   return {
-    begin(): number {
+    begin() {
       current += 1
       return current
     },
-    isCurrent(requestId: number): boolean {
-      return requestId === current
+    isCurrent(id: number) {
+      return id === current
     },
   }
 }

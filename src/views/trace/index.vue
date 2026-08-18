@@ -96,12 +96,11 @@
       </div>
     </section>
 
-    <!-- 节点详情抽屉 -->
     <TraceNodeDetail
       v-model:visible="detailVisible"
-      :node-id="detailNodeId"
-      :son-lot-no="detailSonLotNo"
+      :node="detailNode"
     />
+
   </div>
 </template>
 
@@ -153,10 +152,10 @@ async function loadQuickItems() {
       headers: { Authorization: `Bearer ${sessionStorage.getItem('qms_token') || ''}` },
     })
     // 去重改用 Set：O(n²) indexOf 在数万条数据下会阻塞主线程数秒，Set 为 O(n)
-    const rawBarcodes = (data.data || [])
+    const rawBarcodes: string[] = (data.data || [])
       .filter((node: any) => ['FINISHED_GOOD', 'SEMI_FINISHED', 'MATERIAL'].includes(node.nodeType))
       .map((node: any) => node.barcode)
-      .filter((barcode: string) => !!barcode)
+      .filter((barcode: string) => !!barcode) as string[]
     quickItems.value = Array.from(new Set(rawBarcodes)).slice(0, 6)
   } catch {
     quickItems.value = []
@@ -210,13 +209,9 @@ function switchView(mode: 'list' | 'tree') {
 
 // ── 节点详情 ────────────────────────────────────────────────
 const detailVisible = ref(false)
-const detailNodeId = ref<string | null>(null)
-/** 半成品子项批号（详情查询用，不影响追溯链路） */
-const detailSonLotNo = ref<string | null>(null)
-
+const detailNode = ref<TraceNode | null>(null)
 function openDetail(node: TraceNode) {
-  detailNodeId.value = String(node.id)
-  detailSonLotNo.value = node.sonLotNo ?? null
+  detailNode.value = node
   detailVisible.value = true
 }
 

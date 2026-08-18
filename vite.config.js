@@ -7,6 +7,9 @@ export default defineConfig({
         global: 'globalThis',
     },
     plugins: [vue()],
+    test: {
+        exclude: ['e2e/**', 'node_modules/**', 'dist/**'],
+    },
     resolve: {
         alias: {
             '@': resolve(__dirname, 'src'),

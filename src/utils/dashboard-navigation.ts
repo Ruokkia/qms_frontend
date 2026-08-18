@@ -2,7 +2,7 @@ import type { ModuleKey, NavItem } from '@/types'
 
 type NavigationGroup = {
   label: string
-  items: Pick<NavItem, 'key' | 'title'>[]
+  items: Pick<NavItem, 'key' | 'title' | 'module'>[]
 }
 
 export function filterNavigationByModules<T extends NavigationGroup>(
@@ -13,7 +13,7 @@ export function filterNavigationByModules<T extends NavigationGroup>(
   return groups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => item.key !== 'dashboard' && allowed.has(item.key as ModuleKey)),
+      items: group.items.filter((item) => item.key !== 'dashboard' && allowed.has((item.module ?? item.key) as ModuleKey)),
     }))
     .filter((group) => group.items.length > 0) as T[]
 }

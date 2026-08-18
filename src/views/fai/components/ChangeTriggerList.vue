@@ -31,6 +31,11 @@
 
     <el-table :data="displayList" v-loading="store.loading" border stripe :max-height="tableMaxHeight" :row-class-name="rowClass">
       <el-table-column type="index" label="#" width="50" />
+      <el-table-column label="分类" width="90">
+        <template #default="{ row }">
+          <el-tag size="small" effect="light">{{ row.itemType === 'PRODUCT' ? '产品' : row.itemType === 'MATERIAL' ? '物料' : typeLabel }}</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="triggerType" label="变更类型" width="110" />
       <el-table-column :label="codeLabel" prop="itemCode" width="120">
         <template #default="{ row }">

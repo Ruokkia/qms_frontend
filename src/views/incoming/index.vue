@@ -75,7 +75,7 @@
       <div class="filter-group">
         <el-input
           v-model="query.keyword"
-          placeholder="批次号 / 物料 / 供应商"
+          placeholder="批次号 / 物料条码 / 物料 / 供应商"
           clearable
           size="default"
           class="filter-input"
@@ -289,6 +289,7 @@ import {
   getKeySupplierTrendApi,
   getSupplierRankApi,
   getMaterialInspectionDetailApi,
+  getMaterialInspectionByBarcodeApi,
   updateMaterialInspectionApi,
   deleteMaterialInspectionApi,
 } from '@/api/incoming'
@@ -587,6 +588,23 @@ async function openDetail(id: number) {
   }
 }
 
+async function openTraceDetailFromQuery() {
+  const detailKey = typeof route.query.detail === 'string' ? route.query.detail.trim() : ''
+  if (!detailKey) return
+  try {
+    const res = /^\d+$/.test(detailKey)
+      ? await getMaterialInspectionDetailApi(Number(detailKey))
+      : await getMaterialInspectionByBarcodeApi(detailKey)
+    if (res.code === 0 && res.data) {
+      detail.value = res.data
+      detailMode.value = 'view'
+      detailVisible.value = true
+    }
+  } finally {
+    router.replace({ path: '/incoming', query: {} })
+  }
+}
+
 async function openEdit(id: number) {
   try {
     const res = await getMaterialInspectionDetailApi(id)
@@ -651,6 +669,7 @@ watch(
     loadList()
     loadKeySupplierTrend()
     loadSupplierRank()
+    openTraceDetailFromQuery()
   },
 )
 
@@ -658,6 +677,7 @@ loadStats()
 loadList()
 loadKeySupplierTrend()
 loadSupplierRank()
+openTraceDetailFromQuery()
 </script>
 
 <style scoped>

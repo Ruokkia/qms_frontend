@@ -644,7 +644,7 @@ const specPlaceholder = computed(() => {
 /** 单个样本值的规格状态样式类 */
 function sampleValClass(idx: number): string {
   const v = sampleValues.value[idx]
-  if (v == null || v === '' || Number.isNaN(Number(v))) return ''
+  if (v == null || Number.isNaN(Number(v))) return ''
   const p = currentParam.value
   if (!p) return ''
   const num = Number(v)
@@ -689,7 +689,7 @@ function onSamplePaste(e: ClipboardEvent, startIdx: number) {
 /** 一键继承上一组样本值 */
 function reuseLastSamples() {
   if (lastSubmittedValues.value.length >= (currentParam.value?.subgroupSize ?? 0)) {
-    sampleValues.value = lastSubmittedValues.value.slice(0, currentParam.value!.subgroupSize)
+    sampleValues.value = lastSubmittedValues.value.slice(0, currentParam.value!.subgroupSize ?? undefined)
   }
 }
 

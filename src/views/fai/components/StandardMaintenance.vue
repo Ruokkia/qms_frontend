@@ -52,6 +52,11 @@
       max-height="calc(100vh - 270px)"
       highlight-current-row
     >
+      <el-table-column label="分类" width="90">
+        <template #default>
+          <el-tag size="small" effect="light">{{ typeLabel }}</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column :label="codeLabel" prop="itemCode" width="130">
         <template #default="{ row }">
           <span class="cell-code">{{ row.itemCode || row.materialCode || '-' }}</span>

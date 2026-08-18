@@ -85,8 +85,8 @@
               <template #default="{ row }">
                 <el-button link type="primary" size="small" @click.stop="openParamDialog(row)">编辑</el-button>
                 <el-tooltip
-                  v-if="(row as SpcParameter).subgroupCount || (row as SpcParameter).faiReferenceCount"
-                  :content="(row as SpcParameter).subgroupCount ? '该参数下存在子组数据，无法删除' : '该参数已被检验标准引用，无法删除'"
+                  v-if="(row as SpcParameter).faiReferenceCount"
+                  content="该参数已被检验标准引用，无法删除"
                   placement="top"
                 >
                   <span class="btn-disabled-wrapper">

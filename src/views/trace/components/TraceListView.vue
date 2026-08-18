@@ -8,9 +8,6 @@
           <th class="col-code">节点编码</th>
           <th class="col-batch">批次号</th>
           <th class="col-name">名称</th>
-          <th class="col-supplier">供应商</th>
-          <th class="col-iqc">IQC</th>
-          <th class="col-ref">工单/客户</th>
           <th class="col-action">操作</th>
         </tr>
       </thead>
@@ -45,25 +42,6 @@
             <span class="name-text copyable" @click.stop="copyText(row.node.name || row.node.nodeCode, $event)">{{ row.node.name || row.node.nodeCode }}</span>
             <div v-if="row.node.batchInfo?.materialCode" class="name-sub copyable" @click.stop="copyText(row.node.batchInfo.materialCode, $event)">{{ row.node.batchInfo.materialCode }}</div>
           </td>
-          <td class="cell-supplier">
-            <span v-if="row.node.batchInfo?.supplierName" class="sup-name copyable" @click.stop="copyText(row.node.batchInfo.supplierName, $event)">{{ row.node.batchInfo.supplierName }}</span>
-            <span v-else class="dim">—</span>
-          </td>
-          <td class="cell-iqc">
-            <span
-              v-if="row.node.batchInfo?.iqcStatus"
-              class="iqc-badge"
-              :style="{ background: iqcColor(row.node.batchInfo.iqcStatus) + '18', color: iqcColor(row.node.batchInfo.iqcStatus) }"
-            >
-              {{ row.node.batchInfo.iqcStatus }}
-            </span>
-            <span v-else class="dim">—</span>
-          </td>
-          <td class="cell-ref">
-            <span v-if="row.node.workOrderId" class="ref-text">WO#{{ row.node.workOrderId }}</span>
-            <span v-else-if="row.node.nodeType === 'SN'" class="ref-text dim">在库</span>
-            <span v-else class="dim">—</span>
-          </td>
           <td class="cell-action">
             <button class="detail-btn" @click.stop="$emit('viewDetail', row.node)">详情</button>
           </td>
@@ -78,12 +56,7 @@
 import { computed } from 'vue'
 import type { TraceTreeResult, TraceNode } from '@/types/trace'
 import { flattenTraceBranch } from '@/utils/trace-full-view'
-import {
-  NodeTypeEnum,
-  NODE_TYPE_LABELS,
-  NODE_TYPE_COLORS,
-  IQC_STATUS_COLORS,
-} from '@/enums/trace'
+import { NodeTypeEnum, NODE_TYPE_LABELS, NODE_TYPE_COLORS } from '@/enums/trace'
 
 const props = defineProps<{ result: TraceTreeResult }>()
 defineEmits<{ viewDetail: [node: TraceNode] }>()
@@ -152,10 +125,6 @@ function toRow(node: TraceNode, direction: 'up' | 'down' | 'start', depth: numbe
 
 function dirLabel(d: string): string {
   return d === 'up' ? '上溯' : d === 'down' ? '下溯' : '起点'
-}
-
-function iqcColor(status: string): string {
-  return IQC_STATUS_COLORS[status] ?? '#8C9BA8'
 }
 
 function copyText(text: string, event: Event) {

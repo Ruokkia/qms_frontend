@@ -202,7 +202,7 @@
             </h3>
             <p class="stage-desc" v-if="hasCapa">
               CAPA 立项已完成，8D 团队正在执行根因分析。CAPA 整改计划可在下方制定。
-              完成 D4 根因分析后需通过 CAPA 根因审批方可进入 D5。
+              完成 D4 根因分析后可进入 D5 措施方案制定。
             </p>
             <p class="stage-desc" v-else>
               8D 团队正在执行 D1-D4 根因分析，填写并保存各阶段内容后逐步推进至 D5。
@@ -234,57 +234,12 @@
           />
         </div>
 
-        <!-- BOTH 模式：CAPA 根因审批阶段 -->
-        <div v-if="activeStage === 'capa_root_approval'" class="stage-content">
-          <div class="stage-card">
-            <h3 class="stage-heading">CAPA 根因审批</h3>
-            <p class="stage-desc">
-              8D 团队已完成 D4 根因分析，请质量部门审批根因分析结果。
-              审批通过后，8D 团队可继续推进 D5 措施方案制定。
-            </p>
-            <div v-if="detail?.capaPhase === CapaPhaseEnum.INITIATE" class="capa-approval-form">
-              <div class="capa-approval-field">
-                <label>审批意见</label>
-                <el-input
-                  v-model="capaRootApprovalComment"
-                  type="textarea"
-                  :rows="3"
-                  placeholder="请输入根因审批意见（如：根因分析合理，批准进入措施阶段）"
-                />
-              </div>
-              <el-button
-                type="primary"
-                :loading="capaApprovalLoading"
-                :disabled="!capaRootApprovalComment"
-                @click="handleCapaRootApprove"
-              >
-                审批通过，进入 D5
-              </el-button>
-            </div>
-            <div v-else class="capa-approval-done">
-              <el-tag type="success">根因审批已通过</el-tag>
-              <span style="margin-left: 12px; color: #666">8D 团队可推进至 D5 措施方案制定</span>
-            </div>
-          </div>
-          <!-- 同时展示 D4 根因分析结果供审批参考 -->
-          <ExceptionEightD
-            ref="eightDRef"
-            :exception-id="exceptionId"
-            :eight-d="detail?.eightD"
-            :process-type="detail?.processType"
-            :readonly="true"
-            :card-mode="true"
-            :owner-name="detail?.ownerName"
-            @updated="on8DUpdated"
-          />
-        </div>
-
         <!-- BOTH 模式：8D 措施制定与执行阶段（D5-D8） -->
         <div v-if="activeStage === '8d_measures'" class="stage-content">
           <div class="stage-card capa-phase-notice">
             <h3 class="stage-heading">8D 措施制定与执行（D5-D8）</h3>
             <p class="stage-desc" v-if="hasCapa">
-              CAPA 审批已通过，8D 团队可推进 D5-D8。完成 D5 措施方案后需通过 CAPA 措施审批方可进入 D6。
+              CAPA 整改与 8D 并行推进，8D 团队可推进 D5-D8。
             </p>
             <p class="stage-desc" v-else>
               8D 团队可推进 D5-D8 措施方案与执行，各阶段填写保存后逐步推进至 D8 团队表彰。
@@ -292,41 +247,6 @@
             <el-tag v-if="hasCapa && detail?.capaPhase" type="info" size="small">
               CAPA 相位：{{ CAPA_PHASE_LABELS[detail.capaPhase] || detail.capaPhase }}
             </el-tag>
-          </div>
-          <!-- CAPA 措施审批 -->
-          <div
-            v-if="detail?.capaPhase === CapaPhaseEnum.ROOT_CAUSE_APPROVED && detail?.eightD?.currentStep === 'D5'"
-            class="stage-card"
-          >
-            <h4 style="margin-bottom: 8px">CAPA 措施审批</h4>
-            <p class="stage-desc" style="margin-bottom: 12px">
-              8D 团队已完成 D5 措施方案，请质量部门审批后再推进到 D6 执行。
-            </p>
-            <div class="capa-approval-field">
-              <label>审批意见</label>
-              <el-input
-                v-model="capaMeasuresApprovalComment"
-                type="textarea"
-                :rows="3"
-                placeholder="请输入措施审批意见（如：措施方案可行，批准执行）"
-              />
-            </div>
-            <el-button
-              type="primary"
-              :loading="capaApprovalLoading"
-              :disabled="!capaMeasuresApprovalComment"
-              style="margin-top: 12px"
-              @click="handleCapaMeasuresApprove"
-            >
-              审批通过，进入 D6
-            </el-button>
-          </div>
-          <div
-            v-else-if="detail?.capaPhase === CapaPhaseEnum.MEASURES_APPROVED"
-            class="stage-card"
-          >
-            <el-tag type="success">措施审批已通过</el-tag>
-            <span style="margin-left: 12px; color: #666">8D 团队可推进至 D6-D8</span>
           </div>
           <!-- 8D 报告 D5-D8 -->
           <ExceptionEightD
@@ -339,9 +259,9 @@
             :owner-name="detail?.ownerName"
             @updated="on8DUpdated"
           />
-          <!-- CAPA 改善措施（BOTH 模式下在 8D D6-D8 阶段并行） -->
+          <!-- CAPA 改善措施（BOTH 模式下与 8D D5-D8 并行） -->
           <ExceptionActions
-            v-if="detail?.capaPhase === CapaPhaseEnum.MEASURES_APPROVED"
+            v-if="activeStage === '8d_measures'"
             :exception-id="exceptionId"
             :actions="detail?.improvementActions || []"
             :owner-id="detail?.ownerId"
@@ -365,6 +285,28 @@
 
         <!-- 改善措施阶段 -->
         <div v-if="activeStage === 'measures'" class="stage-content">
+          <!-- 纯 CAPA 模式：根因审批 / 措施审批门禁（闭环前置条件要求完成根因审批） -->
+          <div v-if="isPureCapa" class="stage-card capa-phase-actions">
+            <h3 class="stage-heading">CAPA 相位审批</h3>
+            <p class="stage-desc">
+              纯 CAPA 整改需依次完成「根因审批」「措施审批」方可闭环。当前相位：
+              <el-tag type="info" size="small">{{ CAPA_PHASE_LABELS[detail?.capaPhase || ''] || detail?.capaPhase || '立项中' }}</el-tag>
+            </p>
+            <div class="capa-approve-btns">
+              <el-button
+                type="warning"
+                :disabled="detail?.capaPhase !== CapaPhaseEnum.INITIATE || detail?.status === '已闭环'"
+                :loading="approveRootCauseLoading"
+                @click="handleApproveRootCause"
+              >根因审批</el-button>
+              <el-button
+                type="warning"
+                :disabled="detail?.capaPhase !== CapaPhaseEnum.ROOT_CAUSE_APPROVED || detail?.status === '已闭环'"
+                :loading="approveMeasuresLoading"
+                @click="handleApproveMeasures"
+              >措施审批</el-button>
+            </div>
+          </div>
           <ExceptionActions
             :exception-id="exceptionId"
             :actions="detail?.improvementActions || []"
@@ -489,8 +431,8 @@ import {
   EIGHT_D_STEP_LABELS,
   AUDIT_OPERATION_LABELS,
   AUDIT_TABLE_LABELS,
-  CapaPhaseEnum,
   CAPA_PHASE_LABELS,
+  CapaPhaseEnum,
 } from '@/enums/exception'
 import type { ExceptionDetailVO, AuditLog, ExceptionUserOptionVO } from '@/types/exception'
 import ProcessStepper from './components/ProcessStepper.vue'
@@ -523,11 +465,6 @@ const closeLoading = ref(false)
 const showProductDetail = ref(false)
 const eightDRef = ref<InstanceType<typeof ExceptionEightD>>()
 const closeChecklistRef = ref<InstanceType<typeof CloseChecklist>>()
-
-// CAPA 相位审批相关
-const capaApprovalLoading = ref(false)
-const capaRootApprovalComment = ref('')
-const capaMeasuresApprovalComment = ref('')
 
 const processOptions = [
   { value: 'CAPA', label: 'CAPA 整改', desc: '纠正与预防措施流程，含改善措施、验证与闭环' },
@@ -582,17 +519,18 @@ const show8DView = computed(() => {
   return !!detail.value && processIncludes8D(detail.value.processType)
 })
 
+const has8D = computed(() => !!detail.value && processIncludes8D(detail.value.processType))
+const hasCapa = computed(() => !!detail.value && processIncludesCapa(detail.value.processType))
+// 纯 CAPA（不含 8D）：需走根因审批/措施审批门禁
+const isPureCapa = computed(() => !!detail.value && processIncludesCapa(detail.value.processType) && !processIncludes8D(detail.value.processType))
+
 /** 含 8D 流程（8D / BOTH）sidebar nav 应该跳转到的正确 stage key */
 const current8DStage = computed(() => {
   if (!detail.value) return '8d'
-  // 纯 8D 与 BOTH 均走 CAPA-8D 交错阶段
-  const capaPhase = detail.value.capaPhase
-  if (capaPhase === CapaPhaseEnum.ROOT_CAUSE_APPROVED
-      || capaPhase === CapaPhaseEnum.MEASURES_APPROVED
-      || capaPhase === CapaPhaseEnum.CLOSED) {
-    return '8d_measures'
-  }
-  return '8d_analysis'
+  // 基于 8D 当前步骤线性判断：到达 D5 即进入措施执行阶段
+  const d8Step = detail.value.eightD?.currentStep || ''
+  const d8StepIdx = EIGHT_D_STEP_ORDER.indexOf(d8Step)
+  return d8StepIdx >= 4 ? '8d_measures' : '8d_analysis'
 })
 
 /**
@@ -612,7 +550,6 @@ const stepAccessible = computed<Record<string, boolean>>(() => {
   const initiated = d.capaStatus !== '待发起'
   const d8Step = d.eightD?.currentStep || ''
   const d8StepIdx = EIGHT_D_STEP_ORDER.indexOf(d8Step)
-  const capaPhase = d.capaPhase as string | undefined
 
   const map: Record<string, boolean> = {}
 
@@ -621,16 +558,11 @@ const stepAccessible = computed<Record<string, boolean>>(() => {
   map['audit'] = closed
 
   if (is8D && isCapa) {
-    // BOTH（8D + CAPA）：CAPA-8D 交错推进
-    // initiate → 8d_analysis → capa_root_approval → 8d_measures → verify → audit
-    // BOTH 模式 D4 (index=3) 完成后须先走 CAPA 根因审批（capaPhase->ROOT_CAUSE_APPROVED）方可推进 D5，
-    // 因此到达 D4 即开放 capa_root_approval 入口，避免 D4→D5 被门禁拦截后无法进入审批的死锁；D5→D6 需 CAPA 措施审批
-    const d4Reached = d8StepIdx >= 3
+    // BOTH（8D + CAPA）：CAPA 与 8D 并行推进，无独立审批节点
+    // initiate → 8d_analysis(D1-D4) → 8d_measures(D5-D8) → verify → audit
     map['8d_analysis'] = initiated
-    map['capa_root_approval'] = initiated && d4Reached && capaPhase === CapaPhaseEnum.INITIATE
-    map['8d_measures'] = capaPhase === CapaPhaseEnum.ROOT_CAUSE_APPROVED
-      || capaPhase === CapaPhaseEnum.MEASURES_APPROVED
-    map['verify'] = capaPhase === CapaPhaseEnum.MEASURES_APPROVED
+    map['8d_measures'] = d8StepIdx >= 4   // 到达 D5 即开放措施阶段（D4 完成后可推进）
+    map['verify'] = d8Done                // D8 完成后开放验证闭环
   } else if (is8D) {
     // 纯 8D：无 CAPA 门禁，无根因/措施审批阶段
     // initiate → 8d_analysis(D1-D4) → 8d_measures(D5-D8) → verify → audit
@@ -638,9 +570,9 @@ const stepAccessible = computed<Record<string, boolean>>(() => {
     map['8d_measures'] = d8StepIdx >= 4   // 到达 D5 即开放措施阶段
     map['verify'] = d8Done                // D8 完成后开放验证闭环
   } else {
-    // 纯 CAPA: initiate → plan → measures → verify → audit
+    // 纯 CAPA: initiate → plan → measures → verify → audit（审批内嵌于措施尾部，不再独立成节点）
     map['plan'] = initiated
-    map['measures'] = hasPlans
+    map['measures'] = initiated && (d.rectificationPlans || []).length > 0
     map['verify'] = hasActions
   }
   return map
@@ -733,71 +665,33 @@ function initStage() {
   const has8D = processIncludes8D(detail.value.processType)
   const hasCapa = processIncludesCapa(detail.value.processType)
 
-  // 含 8D 流程（8D / BOTH）：CAPA（治理层）与 8D（执行层）交错推进
+  // 含 8D 流程（8D / BOTH）：CAPA 与 8D 并行推进，无独立审批节点
   if (has8D) {
     const d8Step = detail.value.eightD?.currentStep || ''
     const d8StepIdx = EIGHT_D_STEP_ORDER.indexOf(d8Step)
-    const capaPhase = detail.value.capaPhase as string | undefined
 
+    if (d8Step === 'D8') activeStage.value = 'verify'
+    else if (d8StepIdx >= 4) activeStage.value = '8d_measures'
+    else activeStage.value = '8d_analysis'
+    return
+  }
+
+  // 纯 CAPA 模式：plan → measures → verify 线性推进
+  if (hasCapa) {
     if (detail.value.status === '已闭环') {
       activeStage.value = 'audit'
       return
     }
-
-    // 纯 8D：无 CAPA 治理层，按 8D 步骤线性定位，绝不进入 CAPA 阶段
-    if (!hasCapa) {
-      if (d8Step === 'D8') activeStage.value = 'verify'
-      else if (d8StepIdx >= 4) activeStage.value = '8d_measures'
-      else activeStage.value = '8d_analysis'
-      return
-    }
-
-    // BOTH 模式：基于 capaPhase 的 CAPA-8D 交错定位
-    if (capaPhase === CapaPhaseEnum.INITIATE || capaPhase === undefined || capaPhase === null) {
-      // INITIATE 阶段：8D D1-D4 进行中，D4 (index=3) 完成后引导到 CAPA 根因审批
-      if (d8StepIdx >= 3) {
-        activeStage.value = 'capa_root_approval'
-      } else {
-        activeStage.value = '8d_analysis'
-      }
-      return
-    }
-
-    if (capaPhase === CapaPhaseEnum.ROOT_CAUSE_APPROVED) {
-      // 根因已审批：8D D5 进行中，完成后引导到 CAPA 措施审批
-      activeStage.value = '8d_measures'
-      return
-    }
-
-    if (capaPhase === CapaPhaseEnum.MEASURES_APPROVED) {
-      // 措施已审批：8D D6-D8 + CAPA 验证交错进行
-      if (d8Step === 'D8') {
-        activeStage.value = 'verify'
-      } else {
-        activeStage.value = '8d_measures'
-      }
-      return
-    }
-
-    // 默认
-    activeStage.value = '8d_analysis'
-    return
-  }
-
-  // 纯 CAPA 模式：先计划 → 措施 → 验证
-  if (hasCapa) {
-    if (detail.value.capaStatus === '进行中') {
-      // 按顺序引导：没计划 → plan，有计划没措施 → measures，都有 → verify
-      const plans = detail.value.rectificationPlans || []
-      if (plans.length === 0) { activeStage.value = 'plan'; return }
-      const actions = detail.value.improvementActions || []
-      if (actions.length === 0) { activeStage.value = 'measures'; return }
-      activeStage.value = 'verify'
-    } else if (detail.value.capaStatus === '已完成') {
-      activeStage.value = 'verify'
-    } else {
+    const plans = detail.value.rectificationPlans || []
+    const actions = detail.value.improvementActions || []
+    if (plans.length === 0) {
       activeStage.value = 'plan'
+    } else if (actions.length === 0) {
+      activeStage.value = 'measures'
+    } else {
+      activeStage.value = 'verify'
     }
+    return
   }
 }
 
@@ -887,48 +781,6 @@ async function doInitiate() {
   }
 }
 
-// ===== CAPA 相位审批处理 =====
-
-async function handleCapaRootApprove() {
-  if (!capaRootApprovalComment.value) {
-    ElMessage.warning('请填写审批意见')
-    return
-  }
-  capaApprovalLoading.value = true
-  try {
-    const res = await approveCapaRootCauseApi(exceptionId.value, capaRootApprovalComment.value)
-    if (res.code === 0) {
-      ElMessage.success('根因审批通过，8D 可推进至 D5')
-      capaRootApprovalComment.value = ''
-      loadDetail()
-    }
-  } catch (e) {
-    console.error('根因审批失败', e)
-  } finally {
-    capaApprovalLoading.value = false
-  }
-}
-
-async function handleCapaMeasuresApprove() {
-  if (!capaMeasuresApprovalComment.value) {
-    ElMessage.warning('请填写审批意见')
-    return
-  }
-  capaApprovalLoading.value = true
-  try {
-    const res = await approveCapaMeasuresApi(exceptionId.value, capaMeasuresApprovalComment.value)
-    if (res.code === 0) {
-      ElMessage.success('措施审批通过，8D 可推进至 D6')
-      capaMeasuresApprovalComment.value = ''
-      loadDetail()
-    }
-  } catch (e) {
-    console.error('措施审批失败', e)
-  } finally {
-    capaApprovalLoading.value = false
-  }
-}
-
 async function handleClose(closeReason: string) {
   try {
     await ElMessageBox.confirm('确认闭环该异常单？闭环后无法修改整改数据。', '确认闭环', { type: 'warning' })
@@ -949,41 +801,72 @@ async function handleClose(closeReason: string) {
   }
 }
 
+// ===== 纯 CAPA 相位审批（根因审批 / 措施审批） =====
+const approveRootCauseLoading = ref(false)
+const approveMeasuresLoading = ref(false)
+
+async function handleApproveRootCause() {
+  let comment = ''
+  try {
+    const { value } = await ElMessageBox.prompt('请输入根因审批意见', 'CAPA 根因审批', {
+      inputType: 'textarea',
+      confirmButtonText: '通过',
+      cancelButtonText: '取消',
+    })
+    comment = value || ''
+  } catch {
+    return
+  }
+  approveRootCauseLoading.value = true
+  try {
+    const res = await approveCapaRootCauseApi(exceptionId.value, comment)
+    if (res.code === 0) {
+      ElMessage.success('根因审批通过')
+      await loadDetail()
+    }
+  } catch (e) {
+    console.error('根因审批失败', e)
+  } finally {
+    approveRootCauseLoading.value = false
+  }
+}
+
+async function handleApproveMeasures() {
+  let comment = ''
+  try {
+    const { value } = await ElMessageBox.prompt('请输入措施审批意见', 'CAPA 措施审批', {
+      inputType: 'textarea',
+      confirmButtonText: '通过',
+      cancelButtonText: '取消',
+    })
+    comment = value || ''
+  } catch {
+    return
+  }
+  approveMeasuresLoading.value = true
+  try {
+    const res = await approveCapaMeasuresApi(exceptionId.value, comment)
+    if (res.code === 0) {
+      ElMessage.success('措施审批通过')
+      await loadDetail()
+    }
+  } catch (e) {
+    console.error('措施审批失败', e)
+  } finally {
+    approveMeasuresLoading.value = false
+  }
+}
+
 function on8DUpdated(eightD: any) {
   if (detail.value) {
     detail.value.eightD = eightD
     // 根据当前状态引导用户到合适的阶段
     if (detail.value.status !== '已闭环') {
       // D4 完成后，BOTH 模式引导到 CAPA 根因审批
-      if (eightD?.currentStep === 'D4' && detail.value.processType === 'BOTH') {
-        const capaPhase = detail.value.capaPhase as string | undefined
-        if (capaPhase === CapaPhaseEnum.INITIATE) {
-          ElMessage.success('8D 根因分析（D4）已完成，请进入 CAPA 根因审批阶段')
-          setTimeout(() => { activeStage.value = 'capa_root_approval'; loadDetail() }, 800)
-          return
-        }
-      }
-      // D8 完成后：根据流程类型引导到合适的下一阶段
+      // D8 完成后：引导到验证闭环阶段
       if (eightD?.currentStep === 'D8') {
-        const capaPhase = detail.value.capaPhase as string | undefined
-        if (detail.value.processType === 'BOTH') {
-          // BOTH 模式：CAPA 治理层必须与 8D 交错推进，必须先走完 CAPA 审批才能闭环
-          if (capaPhase === CapaPhaseEnum.INITIATE) {
-            ElMessage.warning('8D 报告已完成，但 CAPA 根因尚未审批，请先进入 CAPA 根因审批阶段')
-            setTimeout(() => { activeStage.value = 'capa_root_approval'; loadDetail() }, 800)
-          } else if (capaPhase === CapaPhaseEnum.ROOT_CAUSE_APPROVED) {
-            ElMessage.warning('8D 报告已完成，但 CAPA 措施尚未审批，请进入 8D 措施与执行阶段并行推进 CAPA 措施')
-            setTimeout(() => { activeStage.value = '8d_measures'; loadDetail() }, 800)
-          } else {
-            // MEASURES_APPROVED / CLOSED：CAPA 治理层已完成，可进入验证闭环
-            ElMessage.success('8D 报告全部完成，请前往验证闭环阶段确认整改效果')
-            setTimeout(() => { activeStage.value = 'verify'; loadDetail() }, 800)
-          }
-        } else {
-          // 纯 8D：无 CAPA 治理层，D8 直接引导到验证闭环
-          ElMessage.success('8D 报告全部完成，请前往验证闭环阶段确认整改效果')
-          setTimeout(() => { activeStage.value = 'verify'; loadDetail() }, 800)
-        }
+        ElMessage.success('8D 报告全部完成，请前往验证闭环阶段确认整改效果')
+        setTimeout(() => { activeStage.value = 'verify'; loadDetail() }, 800)
       }
     }
   }

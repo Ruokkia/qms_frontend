@@ -100,6 +100,13 @@ export type ModuleKey =
   | 'productionDefect' // 生产不良数据统计与多维趋势分析 M1-生产维修
   | 'processTools'     // 过程工具 M6（FMEA 风险跟踪 / 鱼骨图分析，独立模板模块）
   | 'finishedGoods'    // 成品数据管理 M1-成品入库检验审核
+  | 'supplier'         // 供应商档案管理 M2-1（聚合来料/来料异常查看）
+  | 'supplierAudit'    // 供应商现场审核 M7（计划/执行/整改闭环/报告）
+  | 'supplierMaterialChange' // 供应商物料变更管理（规格/工艺/产地变更受控）
+  | 'tooling'         // 工装管理
+  | 'afterSales'      // 售后工单与客户满意度
+  | 'measurement'     // 计量器具全生命周期
+  | 'qualitySystem'   // 质量体系合规监控
 
 /** 固化工序枚举（红线：禁止新增其它工序） */
 export enum ProcessEnum {
@@ -120,10 +127,15 @@ export const PROCESS_CODE_MAP: Record<ProcessEnum, string> = {
 
 /** 导航菜单项 */
 export interface NavItem {
-  key: ModuleKey | 'dashboard'
+  /** 菜单唯一标识（允许与权限模块解耦，避免同一模块下多个入口 key 冲突） */
+  key: string
   title: string
   icon: string
   path: string
+  /** 可见性所需的后端权限模块；缺省时回退到 key */
+  module?: ModuleKey
+  /** 是否建设中（占位不可点击，点击提示「功能建设中」） */
+  comingSoon?: boolean
 }
 
 export interface AdminUser { id: number; account: string; realName: string; roleCode: string; plantCode: PlantCode; plantName: string; status: number; authVersion: number; lastLoginAt?: string }

@@ -261,13 +261,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { runWithSavingState } from '@/utils/detail-save-state'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   getFinishedGoodsListApi,
   getFinishedGoodsDetailApi,
+  getFinishedGoodsByBarcodeApi,
   updateFinishedGoodsApi,
   deleteFinishedGoodsApi,
 } from '@/api/finishedGoods'
@@ -295,6 +296,7 @@ const filters = reactive<FinishedGoodsListParams>({
 /** 检验结果「自定义」时的手动输入关键字（模糊搜索） */
 const customInspectionKeyword = ref('')
 const router = useRouter()
+const route = useRoute()
 
 async function search() {
   filters.page = 1
@@ -410,6 +412,23 @@ async function openDetail(id: number) {
     }
   } catch (e) {
     console.error('加载详情失败', e)
+  }
+}
+
+async function openTraceDetailFromQuery() {
+  const detailKey = typeof route.query.detail === 'string' ? route.query.detail.trim() : ''
+  if (!detailKey) return
+  try {
+    const res = /^\d+$/.test(detailKey)
+      ? await getFinishedGoodsDetailApi(Number(detailKey))
+      : await getFinishedGoodsByBarcodeApi(detailKey)
+    if (res.code === 0 && res.data) {
+      detail.value = res.data
+      detailEditMode.value = false
+      detailVisible.value = true
+    }
+  } finally {
+    router.replace({ path: '/finished-goods', query: {} })
   }
 }
 
@@ -585,7 +604,8 @@ function reviewStyle(status: string) {
   return { color: '#b8763e', background: '#b8763e18', borderColor: '#b8763e40' }
 }
 
-onMounted(() => loadList())
+onMounted(() => { loadList(); openTraceDetailFromQuery() })
+watch(() => route.query.detail, openTraceDetailFromQuery)
 </script>
 
 <style scoped>

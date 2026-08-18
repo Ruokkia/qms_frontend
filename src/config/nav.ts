@@ -67,6 +67,47 @@ export const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     ],
   },
   {
+    label: '供应商基础管理',
+    items: [
+      { key: 'supplierBase', title: '绩效与评审', icon: 'TrendCharts', path: '/supplier', module: 'supplier' },
+      {
+        key: 'supplierArchive',
+        title: '供应商档案管理',
+        icon: 'OfficeBuilding',
+        path: '/supplier-archive',
+        module: 'supplier',
+      },
+      {
+        key: 'supplierAudit',
+        title: '供应商现场审核',
+        icon: 'Stamp',
+        path: '/supplier-audit',
+        module: 'supplier',
+      },
+      {
+        key: 'supplierMaterialChange',
+        title: '供应商物料变更管理',
+        icon: 'Refresh',
+        path: '/supplier-change',
+      },
+    ],
+  },
+  {
+    label: '工装管理',
+    items: [
+      { key: 'tooling', title: '工装台账管理', icon: 'Collection', path: '/tooling' },
+      { key: 'toolingMaintenance', title: '工装维修和保养', icon: 'Tools', path: '/tooling-maintenance' },
+    ],
+  },
+  {
+    label: '售后管理',
+    items: [
+      { key: 'afterSales', title: '工单与客户满意度', icon: 'Service', path: '/after-sales' },
+    ],
+  },
+  { label: '计量管理', items: [{ key: 'measurement', title: '计量器具管理', icon: 'ScaleToOriginal', path: '/measurement' }] },
+  { label: '体系管理', items: [{ key: 'qualitySystem', title: '体系合规管理', icon: 'Management', path: '/quality-system' }] },
+  {
     label: '过程工具',
     items: [
       {
