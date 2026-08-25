@@ -1,0 +1,6 @@
+chore: 同步文档、e2e 测试、工具函数与数据脚本
+
+- 新增 e2e 测试：auth、exception、finished-goods、incoming、permission
+- 新增 latest-request 工具函数与测试
+- 新增工作台导航、角色权限树等超能力设计文档
+- 同步真实数据 SQL 脚本

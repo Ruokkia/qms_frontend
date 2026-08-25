@@ -106,6 +106,13 @@ export function getMaterialInspectionByBarcodeApi(
   return apiGet<MaterialInspection>(`${BASE}/by-barcode`, { params: { barcode } })
 }
 
+/** 手动新增物料检验记录 */
+export function createMaterialInspectionApi(
+  data: Partial<MaterialInspection>,
+): Promise<ApiResult<MaterialInspection>> {
+  return apiPost<MaterialInspection>(BASE, data)
+}
+
 /** 更新物料检验记录 */
 export function updateMaterialInspectionApi(
   id: number,

@@ -4,7 +4,7 @@
  * 路径前缀：/api/v1/finished-goods
  * 严格对齐 FinishedGoodsInspectionController 接口契约。
  */
-import { apiGet, apiPut, apiDelete } from './request'
+import { apiGet, apiPost, apiPut, apiDelete } from './request'
 import type { ApiResult, PageResult } from '@/types'
 import type {
   FinishedGoodsInspection,
@@ -32,6 +32,13 @@ export function getFinishedGoodsByBarcodeApi(
   barcode: string,
 ): Promise<ApiResult<FinishedGoodsInspection>> {
   return apiGet<FinishedGoodsInspection>(`${BASE}/by-barcode`, { params: { barcode } })
+}
+
+/** 手动新增成品/半成品检验 */
+export function createFinishedGoodsApi(
+  data: Partial<FinishedGoodsInspection>,
+): Promise<ApiResult<FinishedGoodsInspection>> {
+  return apiPost<FinishedGoodsInspection>(BASE, data)
 }
 
 /** 更新成品入库检验 */

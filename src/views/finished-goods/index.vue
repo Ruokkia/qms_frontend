@@ -6,6 +6,9 @@
         <h2>成品数据管理</h2>
         <span class="breadcrumb">来料与成品质量管控 / 成品入库检验审核</span>
       </div>
+      <div class="header-actions">
+        <button class="add-btn" type="button" @click="openCreate">+ 新增成品</button>
+      </div>
     </div>
 
     <!-- 筛选行 -->
@@ -269,6 +272,7 @@ import {
   getFinishedGoodsListApi,
   getFinishedGoodsDetailApi,
   getFinishedGoodsByBarcodeApi,
+  createFinishedGoodsApi,
   updateFinishedGoodsApi,
   deleteFinishedGoodsApi,
 } from '@/api/finishedGoods'
@@ -445,15 +449,26 @@ async function openEdit(id: number) {
   }
 }
 
+function openCreate() {
+  detail.value = null
+  detailEditMode.value = true
+  detailVisible.value = true
+}
+
 async function onDetailSaved(data: Partial<FinishedGoodsInspection>) {
   await runWithSavingState((saving) => { savingDetail.value = saving }, async () => {
-    if (!data.id) {
-      ElMessage.error('缺少记录ID，无法保存修改')
+    if (data.id) {
+      const res = await updateFinishedGoodsApi(data.id, data)
+      if (res.code === 0) {
+        ElMessage.success('更新成功')
+        detailVisible.value = false
+        loadList()
+      }
       return
     }
-    const res = await updateFinishedGoodsApi(data.id, data)
+    const res = await createFinishedGoodsApi(data)
     if (res.code === 0) {
-      ElMessage.success('更新成功')
+      ElMessage.success('新增成功')
       detailVisible.value = false
       loadList()
     }
@@ -633,6 +648,20 @@ watch(() => route.query.detail, openTraceDetailFromQuery)
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.add-btn {
+  background: #1b3a5b;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.add-btn:hover {
+  background: #142a42;
 }
 
 /* 筛选栏 */
